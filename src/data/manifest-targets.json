@@ -1,0 +1,62 @@
+{
+  "A1": [
+    { "id": "nhDIlSdpV-c", "parts": 2 },
+    { "id": "h2PbncQq0jM", "parts": 1 },
+    { "id": "8266-l00Ows", "parts": 1 },
+    { "id": "0EYibOCBRIY", "parts": 2 },
+    { "id": "9pJsDDw6LkA", "parts": 2 },
+    { "id": "fPohqlw6QzE", "parts": 2 },
+    { "id": "ea3kMif5bro", "parts": 1 },
+    { "id": "CEKc4vKzO_s", "parts": 1 }
+  ],
+  "A2": [
+    { "id": "m95JdpLzkQY", "parts": 2 },
+    { "id": "Onc0P6sFcsc", "parts": 2 },
+    { "id": "A05n32Bl0aY", "parts": 1 },
+    { "id": "RxHPtsIYBWQ", "parts": 2 },
+    { "id": "AC7u6hjHFrQ", "parts": 2 },
+    { "id": "VNSYBeSjWb4", "parts": 1 },
+    { "id": "dwzxYwbqHAQ", "parts": 1 },
+    { "id": "qTSDL94_Y7M", "parts": 1 }
+  ],
+  "B1": [
+    { "id": "Xe-7dLntOeQ", "parts": 2 },
+    { "id": "XeBE7bFqOgU", "parts": 2 },
+    { "id": "p8-uEJ11GAM", "parts": 2 },
+    { "id": "DrXEXZhAo1A", "parts": 1 },
+    { "id": "OqdWdbmLya8", "parts": 1 },
+    { "id": "ThEpPnmBYMw", "parts": 2 },
+    { "id": "XHrw3AFW0Z0", "parts": 1 },
+    { "id": "TjpkMfTBVQs", "parts": 1 }
+  ],
+  "B2": [
+    { "id": "eF7zdv4HWVo", "parts": 2 },
+    { "id": "OUzW2ssrgtU", "parts": 2 },
+    { "id": "s_m22BxJE08", "parts": 2 },
+    { "id": "JakSLWXuEDE", "parts": 1 },
+    { "id": "RZ7RpzRia78", "parts": 2 },
+    { "id": "eeumL7Fz-8M", "parts": 1 },
+    { "id": "lEgqCXJ5Jk0", "parts": 1 },
+    { "id": "34ttspXxYlw", "parts": 1 }
+  ],
+  "C1": [
+    { "id": "iqdSagycCWc", "parts": 2 },
+    { "id": "hTpCbSat1-0", "parts": 2 },
+    { "id": "Sch-HhW4dB0", "parts": 2 },
+    { "id": "xs30aF5lnTk", "parts": 1 },
+    { "id": "qpnNsSyDw-g", "parts": 1 },
+    { "id": "9-5SMpg7Q0k", "parts": 2 },
+    { "id": "ad7HqXEc2Sc", "parts": 1 },
+    { "id": "AdKUJxjn-R8", "parts": 1 }
+  ],
+  "C2": [
+    { "id": "iqdSagycCWc", "parts": 3 },
+    { "id": "Sch-HhW4dB0", "parts": 2 },
+    { "id": "xs30aF5lnTk", "parts": 2 },
+    { "id": "qYvXk_bqlBk", "parts": 1 },
+    { "id": "khkJkR-ipfw", "parts": 1 },
+    { "id": "arj7oStGLkU", "parts": 1 },
+    { "id": "tF7YLGpOoz8", "parts": 1 },
+    { "id": "_X0mgOOSpLU", "parts": 1 }
+  ]
+}
