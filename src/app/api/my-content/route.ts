@@ -9,6 +9,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 const cache = new Map<string, ReturnType<typeof buildMyContentLesson>>();
+// Keyed by lesson key (mc-01, mc-02…) — each entry is a SHORT scene.
 const bakedMap = baked as Record<string, { title: string; author: string; cues?: Cue[]; transcript?: string }>;
 
 function cuesFromText(transcript: string): Cue[] {
@@ -28,51 +29,44 @@ function cuesFromText(transcript: string): Cue[] {
 
 export async function GET(req: NextRequest) {
   const id = req.nextUrl.searchParams.get("id") ?? "";
-  const lesson = myContentLessons.find((l) => l.id === id);
+  const lesson = myContentLessons.find((l) => l.id === id || l.key === id);
   if (!lesson) return Response.json({ error: "unknown lesson" }, { status: 404 });
-  if (cache.has(id)) return Response.json(cache.get(id));
+  if (cache.has(lesson.key)) return Response.json(cache.get(lesson.key));
 
-  const category = lesson.category === "design" ? "Design" : lesson.category === "client" ? "Work" : "Everyday";
+  const category = lesson.category === "design" ? "Design" :
+    lesson.category === "client" || lesson.category === "work" || lesson.category === "meeting" || lesson.category === "feedback" || lesson.category === "present" ? "Work" : "Everyday";
+
   let result: ReturnType<typeof buildMyContentLesson> | null = null;
-
-  // When a video is reused, give each day a different short section.
-  const earlier = myContentLessons.filter((l) => l.videoId === lesson.videoId && l.day < lesson.day);
-  const occurrence = earlier.length + (lesson.start ? 1 : 0);
   const startSec = lesson.start ?? 0;
+  const endSec = lesson.end ?? 0;
 
-  // 1) Prefer fresh real captions from YouTube.
+  // 1) Fresh real captions, trimmed to the short scene window.
   const caps = await fetchYouTubeCaptions(lesson.videoId, { fast: true }).catch(() => null);
   if (caps && caps.cues.length >= 8) {
-    const cues = startSec ? caps.cues.filter((c) => c.t >= startSec * 1000) : caps.cues;
-    if (cues.length >= 8) {
+    let cues = caps.cues;
+    if (startSec) cues = cues.filter((c) => c.t >= startSec * 1000);
+    if (endSec) cues = cues.filter((c) => c.t <= endSec * 1000);
+    if (cues.length >= 6) {
       result = buildMyContentLesson(
-        cues,
-        "B1",
-        { title: caps.title || lesson.title, author: caps.author || "YouTube" },
-        { focus: lesson.focus, category },
-        startSec,
-        occurrence,
+        cues, "B1",
+        { title: caps.title || lesson.title, author: caps.author || lesson.speaker },
+        { focus: lesson.focus, category }, startSec, 0,
       );
     }
   }
 
-  // 2) Curated baked fallback so the full flow always opens.
+  // 2) Bundled scene transcript (accurate, short, keyed per lesson).
   if (!result) {
-    const b = bakedMap[lesson.videoId];
+    const b = bakedMap[lesson.key] ?? bakedMap[lesson.videoId];
     if (b) {
-      let cues: Cue[] = [];
-      if (b.cues?.length) cues = startSec ? b.cues.filter((c) => c.t >= startSec * 1000) : b.cues;
-      else if (b.transcript) cues = cuesFromText(b.transcript);
+      const cues: Cue[] = b.cues?.length ? b.cues : cuesFromText(b.transcript ?? "");
       if (cues.length) {
         result = buildMyContentLesson(
-          cues,
-          "B1",
-          { title: b.title, author: b.author },
-          { focus: lesson.focus, category },
-          startSec,
-          occurrence,
+          cues, "B1",
+          { title: b.title || lesson.title, author: b.author || lesson.speaker },
+          { focus: lesson.focus, category }, startSec, 0,
         );
-        if (startSec) result.start = startSec;
+        result.start = startSec;
       }
     }
   }
@@ -82,6 +76,6 @@ export async function GET(req: NextRequest) {
   }
 
   result.challenge = lesson.focus;
-  cache.set(id, result);
+  cache.set(lesson.key, result);
   return Response.json(result);
 }

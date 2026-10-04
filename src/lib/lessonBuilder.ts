@@ -157,14 +157,32 @@ function pickShadows(cues: Cue[], level: string): string[] {
   const cfg = CFG[level] ?? CFG.B1;
   const seen = new Set<string>();
   const out: string[] = [];
-  for (const c of cues) {
-    const n = c.text.split(/\s+/).length;
-    if (n < 3 || n > cfg.maxSent) continue;
-    const key = c.text.toLowerCase();
-    if (seen.has(key)) continue;
+  const push = (text: string, maxWords: number) => {
+    const n = text.split(/\s+/).length;
+    if (n < 3 || n > maxWords) return;
+    const key = text.toLowerCase();
+    if (seen.has(key)) return;
     seen.add(key);
-    out.push(c.text);
-    if (out.length >= cfg.shadows) break;
+    out.push(text);
+  };
+  // 1) ideal-length sentences
+  for (const c of cues) push(c.text, cfg.maxSent);
+  // 2) if short, split long sentences at commas into speakable clauses
+  if (out.length < cfg.shadows) {
+    for (const c of cues) {
+      for (const clause of c.text.split(/[;—,] - |, /)) {
+        push(clause.trim(), cfg.maxSent);
+        if (out.length >= cfg.shadows) break;
+      }
+      if (out.length >= cfg.shadows) break;
+    }
+  }
+  // 3) if still short, accept longer whole sentences
+  if (out.length < cfg.shadows) {
+    for (const c of cues) {
+      push(c.text, 32);
+      if (out.length >= cfg.shadows) break;
+    }
   }
   return out.slice(0, cfg.shadows);
 }
@@ -320,20 +338,47 @@ export function buildMyContentLesson(
   // unique meanings so no two chunks in a lesson say the same thing.
   if (chunks.length < 6) {
     const usedWords = new Set(chunks.map((c) => c.word.toLowerCase()));
-    const clean = (s: string) => !/[A-Z]{3,}/.test(s) && (s.match(/[a-z]/g) ?? []).length > s.replace(/[a-z]/g, "").length;
-    const candidates = [...splitSentences(text), ...splitSentences(fullText || text)];
-    for (const s of candidates) {
+    const clean = (s: string) => !/[A-Z]{3,}/.test(s) && (s.match(/[a-z]/g) ?? []).length > 4 && s.split(/\s+/).length >= 3;
+    // 1) Functional starters pulled from the scene's own sentences.
+    const all = splitSentences(fullText || text);
+    const startClauses = all.map((s) => s.split(/\s+/).slice(0, 4).join(" ").replace(/[.,;:]+$/, ""));
+    for (let i = 0; i < all.length; i++) {
       if (chunks.length >= 6) break;
+      const s = all[i];
       if (!clean(s)) continue;
-      const word = s.split(/\s+/).slice(0, 5).join(" ").replace(/[.,;:]+$/, "");
-      if (word.split(/\s+/).length < 3) continue;
+      const word = startClauses[i];
+      if (!word || word.split(/\s+/).length < 2) continue;
       const meaning = functionLabel(s);
       const key = word.toLowerCase();
-      // Only the phrase text must be unique; functional meanings may repeat
-      // across genuinely different starters.
       if (usedWords.has(key)) continue;
       usedWords.add(key);
-      chunks.push({ word, part_of_speech: "speaking starter", meaning: `${meaning}`, example: s.slice(0, 170) });
+      chunks.push({ word, part_of_speech: "speaking starter", meaning, example: s.slice(0, 170) });
+    }
+    // 2) Very short scenes (a few animation lines) won't contain six unique
+    // sentences. Fill with genuinely useful, on-context spoken phrases so
+    // the practice still has six items; examples stay from the scene.
+    if (chunks.length < 6) {
+      const bank = spec.category === "Everyday"
+        ? (["can you", "let's", "i need to", "what if we", "that sounds like", "i'll try", "it helps when", "one thing i learned", "what happens next", "i felt"] as string[])
+        : (["i'd suggest", "the reason is", "what do you think", "just to clarify", "so what you're saying is", "let's go back to the brief", "from the customer's point of view", "the next step is", "i'll confirm", "we could try"] as string[]);
+      const bankMeaning: Record<string, string> = {
+        "can you": "ask politely for something", "let's": "suggest doing something together", "i need to": "state what you must do",
+        "what if we": "propose an idea", "that sounds like": "show you understand a situation", "i'll try": "commit to trying something",
+        "it helps when": "explain what improves a situation", "one thing i learned": "share a takeaway",
+        "what happens next": "move a story forward", "i felt": "share a feeling naturally",
+        "i'd suggest": "recommend something politely", "the reason is": "give the key reason",
+        "what do you think": "ask for an opinion", "just to clarify": "confirm your understanding",
+        "so what you're saying is": "repeat back what you heard", "let's go back to the brief": "refocus on the goals",
+        "from the customer's point of view": "explain through the end user", "the next step is": "state what happens next",
+        "i'll confirm": "set a clear follow-up", "we could try": "offer an option gently",
+      };
+      const example = all[0] ?? text;
+      for (const phrase of bank) {
+        if (chunks.length >= 6) break;
+        if (usedWords.has(phrase)) continue;
+        usedWords.add(phrase);
+        chunks.push({ word: phrase, part_of_speech: "speaking chunk", meaning: bankMeaning[phrase] ?? "use it to keep a conversation moving", example: example.slice(0, 170) });
+      }
     }
   }
 

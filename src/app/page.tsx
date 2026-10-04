@@ -1,62 +1,105 @@
 import Link from "next/link";
 import { courses } from "@/data/courses";
+import ThemeToggle from "@/components/ThemeToggle";
 
-const colors = ["#31806f", "#d07b32", "#4a4978", "#36738e", "#875984", "#393846"];
+const META: Record<string, { purpose: string; difficulty: string; outcome: string; lessons: number }> = {
+  "a1": { purpose: "Understand very simple, slow exchanges", difficulty: "Beginner", outcome: "Say short sentences about a scene", lessons: 6 },
+  "a2": { purpose: "Follow easy daily conversations", difficulty: "Elementary", outcome: "Retell a moment and react", lessons: 6 },
+  "b1-core": { purpose: "Understand real, slightly challenging speech", difficulty: "Pre-intermediate", outcome: "Explain an idea for 45–60s", lessons: 6 },
+  "b2": { purpose: "Follow opinions, interviews and arguments", difficulty: "Intermediate", outcome: "Compare and justify a view", lessons: 7 },
+  "c1": { purpose: "Catch nuance, subtext and abstract ideas", difficulty: "Upper", outcome: "Analyse a talk for one minute", lessons: 7 },
+  "c2": { purpose: "Follow dense, nuanced professional talk", difficulty: "Advanced", outcome: "Build a precise, qualified argument", lessons: 6 },
+};
 
 export default function HomePage() {
   return (
-    <main className="mx-auto max-w-5xl px-6 py-16 sm:py-24">
-      <header className="flex items-center gap-3">
-        <div className="grid h-10 w-10 place-items-center rounded-xl bg-[#080a0d] font-display text-lg font-semibold text-white">R</div>
-        <span className="font-display text-xl font-semibold tracking-tight">Read to Speak</span>
-      </header>
-
-      <section className="mt-16 max-w-3xl">
-        <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#5fd3b3]">Choose your level · A1 to C2</p>
-        <h1 className="mt-4 font-display text-[clamp(2.4rem,6vw,4rem)] font-semibold leading-[1.02]">Stop studying English. Start using it.</h1>
-        <p className="mt-6 max-w-2xl text-lg leading-relaxed text-[var(--muted)]">
-          Natural General American audio, short shadowing drills, useful spoken chunks, real videos, and guided answers. Pick the level you want to <em>speak</em>—not only the level you understand.
-        </p>
-        <div className="mt-6 rounded-2xl border border-[var(--accent-line)] bg-[var(--accent-soft)] p-4 text-[14px] leading-relaxed text-[var(--ink)]">
-          <strong>Quick level tip:</strong> If you understand B1 but speak at A2, choose <strong>B1 Speak Up Core</strong>. Its input is easy B1, while the answer starters help you move your speaking up from A2.
+    <main className="mx-auto max-w-4xl px-5 pb-24 pt-12 sm:px-6 sm:pt-20">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <span className="grid h-9 w-9 place-items-center rounded-lg bg-[#10231d] font-display text-base font-semibold text-[#f6f4ee]">R</span>
+          <span className="font-display text-lg font-semibold tracking-tight">Read to Speak</span>
         </div>
-        <div className="mt-8">
-          <Link href="/my-content" className="group flex items-center justify-between gap-4 rounded-3xl border border-[#c14b3d]/40 bg-gradient-to-br from-[#2a1411] to-[var(--card)] p-6 transition hover:-translate-y-0.5">
-            <div>
-              <p className="text-[12px] font-bold uppercase tracking-[.18em] text-[#e88a7d]">Your personal track</p>
-              <h2 className="mt-1 font-display text-2xl font-semibold">MY CONTENT</h2>
-              <p className="mt-1 text-sm leading-relaxed text-[var(--muted)]">Real videos picked for you — everyday English, freelancing, and design/client calls — turned into the same speak-first lessons. Built for B1 understanding moving your speaking up from A2.</p>
-            </div>
-            <span className="shrink-0 rounded-full bg-[#c14b3d] px-5 py-3 text-sm font-bold text-white">Open →</span>
-          </Link>
-        </div>
-      </section>
-
-      <section className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-        {courses.map((course, index) => (
-          <Link key={course.id} href={`/learn/${course.id}`} className="group relative flex h-full flex-col rounded-3xl border border-transparent bg-[var(--paper-2)] p-7 shadow-[0_18px_40px_rgba(16,24,40,0.06)] transition hover:-translate-y-1 hover:shadow-[0_28px_60px_rgba(16,24,40,0.10)]">
-            <div className="flex items-center justify-between">
-              <span className="inline-flex min-w-11 items-center justify-center rounded-full px-3 py-2 text-sm font-bold text-white" style={{ backgroundColor: colors[index] }}>{course.level}</span>
-              {course.id === "b1-core" && <span className="rounded-full bg-[var(--accent-soft)] px-3 py-1 text-xs font-bold text-[#5fd3b3]">Recommended</span>}
-            </div>
-            <h2 className="mt-5 font-display text-2xl font-semibold">{course.name}</h2>
-            <p className="mt-1 text-sm font-medium text-[var(--muted)]">{course.range}</p>
-            <p className="mt-3 flex-1 text-[15px] leading-relaxed text-[var(--muted)]">{course.description}</p>
-            <span className="mt-6 inline-flex items-center gap-2 text-sm font-semibold" style={{ color: colors[index] }}>Start speaking <span aria-hidden>→</span></span>
-          </Link>
-        ))}
-      </section>
-
-      <div className="mt-12 rounded-3xl border border-[var(--line)] bg-[var(--card)] p-6">
-        <h2 className="font-display text-2xl font-semibold">Think in English — 5 minutes a day</h2>
-        <p className="mt-2 max-w-2xl text-[15px] leading-relaxed" style={{ color: "var(--muted)" }}>
-          Train the inner voice itself: micro-thoughts, narrating what you do, small decisions, and going around missing words — so you stop translating and start speaking.
-        </p>
-        <Link href="/think" className="mt-4 inline-block rounded-full bg-[#2ea88f] px-5 py-3 text-sm font-bold text-white">Start the daily drill →</Link>
+        <nav className="flex items-center gap-3 text-sm font-medium text-[var(--muted)] sm:gap-4">
+          <Link href="/think" className="hidden sm:inline">Think</Link>
+          <Link href="/my-content" className="font-semibold text-[var(--accent-text)]">My track</Link>
+          <ThemeToggle />
+        </nav>
       </div>
 
-      <footer className="mt-20 border-t border-[var(--line)] pt-8 text-sm text-[var(--muted)]">
-        Six CEFR levels · General American voices · real clips · writing & thinking trainers · no account needed.
+      {/* Hero — one clear action */}
+      <section className="mt-14 sm:mt-20">
+        <p className="text-[12px] font-bold uppercase tracking-[.22em] text-[var(--accent-text)]">Speak real English</p>
+        <h1 className="mt-3 max-w-3xl font-display text-[clamp(2.2rem,6vw,3.6rem)] font-semibold leading-[1.04] tracking-tight">
+          Watch a short clip. Then actually <em className="text-[var(--accent-text)]">talk.</em>
+        </h1>
+        <p className="mt-4 max-w-xl text-[17px] leading-relaxed text-[var(--muted)]">
+          Real scenes turned into guided speaking practice — shadow, steal phrases, build answers, and talk out loud. Choose the level you want to <strong className="text-[var(--ink)]">speak</strong>.
+        </p>
+        <div className="mt-7 flex flex-wrap items-center gap-3">
+          <Link href="/my-content" className="rounded-full bg-[var(--accent-solid)] px-6 py-3 text-[15px] font-bold text-white transition ">Start practicing →</Link>
+          <Link href="/learn/b1-core" className="rounded-full border border-[var(--line-strong)] bg-[var(--card)] px-6 py-3 text-[15px] font-semibold text-[var(--ink)] transition hover:border-[#1d6f5b]">Browse levels</Link>
+        </div>
+        {courses.some((c) => c.id === "b1-core") && (
+          <p className="mt-4 max-w-xl text-[13px] leading-relaxed text-[var(--muted)]">
+            Understand B1 but speak closer to A2? <Link href="/learn/b1-core" className="font-semibold text-[var(--accent-text)] underline underline-offset-2">B1 Speak Up Core</Link> keeps input understandable while the starters lift your speaking.
+          </p>
+        )}
+      </section>
+
+      {/* Personal 3-month track */}
+      <Link href="/my-content" className="mt-14 block rounded-2xl border border-[var(--line)] bg-[var(--card)] p-5 shadow-[var(--shadow-card)] transition hover:-translate-y-0.5 sm:p-6">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-[.18em] text-[var(--accent-text)]">Personal curriculum · 12 weeks</p>
+            <h2 className="mt-1 font-display text-xl font-semibold sm:text-2xl">My 3-month speaking track</h2>
+            <p className="mt-1 max-w-xl text-[13px] leading-relaxed text-[var(--muted)] sm:text-[14px]">
+              Clean, real short clips that move from everyday talk to client and design conversations.
+            </p>
+          </div>
+          <span className="shrink-0 rounded-full border border-[var(--line-strong)] px-4 py-2 text-[13px] font-bold text-[var(--ink)]">Open →</span>
+        </div>
+      </Link>
+
+      {/* Levels — concise, informative */}
+      <section className="mt-12">
+        <div className="flex items-baseline justify-between">
+          <h2 className="font-display text-xl font-semibold">Levels</h2>
+          <span className="text-[13px] text-[var(--muted)]">Finish one, then move up</span>
+        </div>
+        <div className="mt-4 divide-y divide-[var(--line)] overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--card)] shadow-[var(--shadow-card)]">
+          {courses.map((c) => {
+            const m = META[c.id] ?? { purpose: "", difficulty: "", outcome: "", lessons: 6 };
+            const recommended = c.id === "b1-core";
+            return (
+              <Link key={c.id} href={`/learn/${c.id}`} className="group flex items-center gap-4 px-5 py-4 transition hover:bg-[var(--accent-soft)]">
+                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[#10231d] text-[13px] font-bold text-[#f6f4ee]">{c.level}</span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[15px] font-semibold">{c.name}</span>
+                    {recommended && <span className="rounded-full bg-[var(--accent-soft)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[var(--accent-text)]">Recommended</span>}
+                  </div>
+                  <p className="mt-0.5 truncate text-[13px] text-[var(--muted)]">{m.purpose} · <span className="italic">{m.outcome}</span></p>
+                </div>
+                <span className="hidden shrink-0 text-right text-[12px] text-[var(--muted)] sm:block">{m.lessons} lessons<br />{m.difficulty}</span>
+                <span className="shrink-0 text-[var(--muted)] transition group-hover:translate-x-0.5 group-hover:text-[var(--accent-text)]">→</span>
+              </Link>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* Think */}
+      <Link href="/think" className="mt-8 flex items-center justify-between gap-4 rounded-2xl border border-[var(--line)] bg-[var(--card)] p-5 shadow-[var(--shadow-card)] transition hover:-translate-y-0.5 sm:p-6">
+        <div>
+          <h2 className="font-display text-lg font-semibold sm:text-xl">Think in English</h2>
+          <p className="mt-1 max-w-xl text-[13px] text-[var(--muted)] sm:text-[14px]">Five minutes of micro-thoughts so you stop translating and start forming sentences directly.</p>
+        </div>
+        <span className="shrink-0 rounded-full border border-[var(--line-strong)] px-4 py-2 text-[13px] font-bold">Open →</span>
+      </Link>
+
+      <footer className="mt-16 border-t border-[var(--line)] pt-6 text-[12px] text-[var(--muted)]">
+        Real clips · General American practice voice · original speakers kept in every video · no account needed.
       </footer>
     </main>
   );

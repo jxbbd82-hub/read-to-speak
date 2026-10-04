@@ -1,66 +1,62 @@
 {
   "A1": [
     {
-      "id": "nhDIlSdpV-c",
-      "parts": 8
+      "id": "h2PbncQq0jM",
+      "parts": 3
     },
     {
-      "id": "h2PbncQq0jM",
-      "parts": 4
+      "id": "m95JdpLzkQY",
+      "parts": 3
     }
   ],
   "A2": [
     {
-      "id": "RxHPtsIYBWQ",
-      "parts": 2
+      "id": "Onc0P6sFcsc",
+      "parts": 3
     },
     {
-      "id": "dwzxYwbqHAQ",
-      "parts": 10
+      "id": "wogrp3GNUM8",
+      "parts": 3
     }
   ],
   "B1": [
     {
-      "id": "Xe-7dLntOeQ",
-      "parts": 6
-    },
-    {
-      "id": "XeBE7bFqOgU",
+      "id": "UNP03fDSj1U",
       "parts": 3
     },
     {
-      "id": "p8-uEJ11GAM",
+      "id": "V74AxCqOTvg",
       "parts": 3
     }
   ],
   "B2": [
     {
-      "id": "eF7zdv4HWVo",
-      "parts": 2
+      "id": "eIho2S0ZahI",
+      "parts": 4
     },
     {
-      "id": "s_m22BxJE08",
-      "parts": 1
-    },
-    {
-      "id": "RZ7RpzRia78",
-      "parts": 7
-    },
-    {
-      "id": "eeumL7Fz-8M",
-      "parts": 2
+      "id": "5MgBikgcWnY",
+      "parts": 3
     }
   ],
   "C1": [
     {
-      "id": "iqdSagycCWc",
-      "parts": 12
+      "id": "8KkKuTCFvzI",
+      "parts": 4
+    },
+    {
+      "id": "HjriwYrGL28",
+      "parts": 3
     }
   ],
   "C2": [
     {
-      "id": "lEgqCXJ5Jk0",
-      "parts": 12
+      "id": "BSxg87CoOu4",
+      "parts": 3
+    },
+    {
+      "id": "pa4u8KwpO0k",
+      "parts": 3
     }
   ]
 }

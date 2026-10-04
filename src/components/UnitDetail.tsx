@@ -2,8 +2,17 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { LearningItem, VocabItem } from "@/data/courses";
-import { accents, MAX_MARKS, type ProgressEntry, type Accent } from "@/lib/accents";
+import { accents, type Accent, type ProgressEntry } from "@/lib/accents";
 import { playNeural, stopNeural } from "@/lib/neuralAudio";
+import { PlayButton, toSentences, LEVEL_VOICE } from "./Sentence";
+import InteractiveTranscript from "./InteractiveTranscript";
+import ShadowDrill from "./ShadowDrill";
+import PhrasePractice from "./PhrasePractice";
+import BuildAnswer from "./BuildAnswer";
+import SpeakingLadder from "./SpeakingLadder";
+import SpeakingChallenge from "./SpeakingChallenge";
+import SimpleRecorder from "./SimpleRecorder";
+import { buildLadder, buildStems, thinkTasks, challengePrep, isClientContext } from "@/lib/speaking";
 
 const UNLOCK_LISTENS = 1;
 
@@ -14,111 +23,6 @@ type Segment = {
   challenge?: string;
 };
 
-/* ----------------------- small audio icon button ----------------------- */
-function Talk({ text, level, voice, label, big }: { text: string; level: string; voice: string; label: string; big?: boolean }) {
-  const [on, setOn] = useState(false);
-  const go = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    stopNeural();
-    setOn(true);
-    playNeural(text, { voice: voice as "ava" | "andrew", level, onEnd: () => setOn(false) });
-  };
-  return (
-    <button type="button" onClick={go} aria-label={label} title={label}
-      className={`grid place-items-center rounded-full border transition hover:scale-105 ${big ? "h-11 w-11" : "h-8 w-8"}`}
-      style={{ borderColor: "var(--line)", color: "var(--accent-text)", backgroundColor: on ? "var(--accent-soft)" : "var(--card)" }}>
-      <span className={on ? "rts-pulse" : ""}>{on ? "❚❚" : "▶"}</span>
-    </button>
-  );
-}
-
-function RealVideosButton({ query, accent }: { query: string; accent: Accent }) {
-  return (
-    <button type="button" title="Hear it in real videos" aria-label="Hear this phrase in real videos"
-      onClick={(e) => { e.stopPropagation(); window.dispatchEvent(new CustomEvent("open-youglish", { detail: query })); }}
-      className="grid h-8 w-8 place-items-center rounded-full border transition hover:scale-105"
-      style={{ borderColor: accent.line, color: accent.text, backgroundColor: "var(--card)" }}>
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden><path d="M23.5 6.2a3 3 0 0 0-2.1-2.1C19.5 3.6 12 3.6 12 3.6s-7.5 0-9.4.5A3 3 0 0 0 .5 6.2 31 31 0 0 0 0 12a31 31 0 0 0 .5 5.8 3 3 0 0 0 2.1 2.1c1.9.5 9.4.5 9.4.5s7.5 0 9.4-.5a3 3 0 0 0 2.1-2.1A31 31 0 0 0 24 12a31 31 0 0 0-.5-5.8ZM9.6 15.6V8.4L15.8 12Z" /></svg>
-    </button>
-  );
-}
-
-/* ------------------------------- recorder ------------------------------- */
-function Recorder({ accent }: { accent: Accent }) {
-  const rec = useRef<MediaRecorder | null>(null);
-  const stream = useRef<MediaStream | null>(null);
-  const chunks = useRef<Blob[]>([]);
-  const [recording, setRecording] = useState(false);
-  const [url, setUrl] = useState("");
-  const start = async () => {
-    const s = await navigator.mediaDevices.getUserMedia({ audio: true }).catch(() => null);
-    if (!s) return;
-    stream.current = s; chunks.current = [];
-    const r = new MediaRecorder(s); rec.current = r;
-    r.ondataavailable = (e) => e.data.size && chunks.current.push(e.data);
-    r.onstop = () => { setUrl(URL.createObjectURL(new Blob(chunks.current, { type: r.mimeType || "audio/webm" }))); s.getTracks().forEach((t) => t.stop()); setRecording(false); };
-    r.start(); setRecording(true);
-  };
-  return (
-    <div className="mt-3 flex flex-wrap items-center gap-3">
-      <button type="button" onClick={recording ? () => rec.current?.stop() : start} className="rounded-full px-4 py-2 text-[13px] font-bold text-white" style={{ backgroundColor: recording ? "#b0473f" : accent.solid }}>
-        {recording ? "● Stop" : "🎙 Record"}
-      </button>
-      {url && <audio src={url} controls className="h-10 min-w-0 flex-1" />}
-    </div>
-  );
-}
-
-/* ------------------------------ writing lab ----------------------------- */
-function WritingLab({ storageKey, model, prompt, accent, level }: { storageKey: string; model: string; prompt: string; accent: Accent; level: string }) {
-  const [tab, setTab] = useState<"retell" | "dictation">("retell");
-  const [text, setText] = useState("");
-  const [dictation, setDictation] = useState("");
-  const [showModel, setShowModel] = useState(false);
-  const target = { A1: 30, A2: 45, B1: 60, B2: 90, C1: 120, C2: 150 }[level] ?? 60;
-  useEffect(() => { setText(localStorage.getItem(`${storageKey}-retell`) ?? ""); setDictation(localStorage.getItem(`${storageKey}-dict`) ?? ""); }, [storageKey]);
-  const save = (kind: string, val: string) => { localStorage.setItem(`${storageKey}-${kind}`, val); };
-  const norm = (s: string) => s.toLowerCase().replace(/[^a-z\s']/g, " ").replace(/\s+/g, " ").trim();
-  const dictTarget = useMemo(() => model.split(/(?<=[.!?])\s+/).filter((s) => s.split(/\s+/).length <= 12)[0] ?? model, [model]);
-  const match = dictation && norm(dictation) === norm(dictTarget);
-  return (
-    <div className="rounded-3xl border p-5" style={{ borderColor: "var(--line)", backgroundColor: "var(--card)" }}>
-      <div className="flex flex-wrap items-center gap-2">
-        {(["retell", "dictation"] as const).map((t) => (
-          <button key={t} onClick={() => setTab(t)} className="rounded-full px-4 py-1.5 text-[12px] font-bold"
-            style={{ backgroundColor: tab === t ? accent.solid : "var(--paper)", color: tab === t ? "#fff" : "var(--muted)" }}>
-            {t === "retell" ? "Write it your way" : "Dictation"}
-          </button>
-        ))}
-      </div>
-      <p className="mt-3 text-sm leading-relaxed" style={{ color: "var(--muted)" }}>{tab === "retell" ? prompt : "Listen, type the sentence, then check yourself. Spelling practice trains the same patterns as speaking."}</p>
-      {tab === "retell" ? (
-        <>
-          <textarea value={text} onChange={(e) => { setText(e.target.value); save("retell", e.target.value); }} rows={6}
-            placeholder="Write here…" className="mt-3 w-full rounded-2xl border p-3 text-sm outline-none" style={{ borderColor: "var(--line)", backgroundColor: "var(--paper)", color: "var(--ink)" }} />
-          <div className="mt-2 flex flex-wrap items-center gap-3 text-[12px]" style={{ color: "var(--muted)" }}>
-            <span>{text.trim() ? text.trim().split(/\s+/).length : 0} / {target} words</span>
-            <label className="flex items-center gap-2"><input type="checkbox" /> Used 2 chunks from the scene</label>
-            <button onClick={() => setShowModel((v) => !v)} className="ml-auto font-semibold underline" style={{ color: accent.text }}>{showModel ? "Hide model" : "Show scene text"}</button>
-          </div>
-          {showModel && <p className="mt-3 rounded-2xl p-3 text-sm leading-relaxed" style={{ backgroundColor: "var(--paper)", color: "var(--muted)" }}>{model}</p>}
-        </>
-      ) : (
-        <>
-          <div className="mt-3 flex items-center gap-3">
-            <Talk text={dictTarget} level={level} voice="ava" label="Play dictation" big />
-            <span className="text-sm" style={{ color: "var(--muted)" }}>Play, then type what you hear.</span>
-          </div>
-          <textarea value={dictation} onChange={(e) => { setDictation(e.target.value); save("dict", e.target.value); }} rows={3}
-            className="mt-3 w-full rounded-2xl border p-3 text-sm outline-none" style={{ borderColor: "var(--line)", backgroundColor: "var(--paper)", color: "var(--ink)" }} />
-          {dictation && <p className="mt-2 text-[13px] font-semibold" style={{ color: match ? "#54c79a" : "#e0a368" }}>{match ? "✓ Exact match" : "Not exact yet — replay and compare:"}</p>}
-          {dictation && !match && <p className="mt-1 rounded-2xl p-3 text-sm" style={{ backgroundColor: "var(--paper)", color: "var(--muted)" }}>{dictTarget}</p>}
-        </>
-      )}
-    </div>
-  );
-}
-
 export type LessonSource = {
   fetchUrl: string;
   cacheKey: string;
@@ -127,267 +31,320 @@ export type LessonSource = {
   backLabel: string;
   levelLabel: string;
   videoStart?: number;
+  topic?: string;
 };
 
-/* -------------------------------- detail -------------------------------- */
-export default function UnitDetail({ item, entry, onChange, onClose, source, challenge }: {
-  item: LearningItem; entry: ProgressEntry; onChange: (p: Partial<ProgressEntry>) => void; onClose: () => void;
-  source?: LessonSource; challenge?: string;
-}) {
-  const acc = accents[item.accent];
-  const [seg, setSeg] = useState<Segment | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [needsText, setNeedsText] = useState(false);
-  const [paste, setPaste] = useState("");
-  const [busyPaste, setBusyPaste] = useState(false);
-  const [rate, setRate] = useState(1);
-  const [playingAll, setPlayingAll] = useState(false);
-  const [thinkDone, setThinkDone] = useState<boolean[]>([false, false, false]);
-  const cacheKey = source?.cacheKey ?? `rts-seg-${item.level}-${item.videoId}-${item.seg}`;
-  const unlocked = entry.readingUnlocked || entry.listens >= UNLOCK_LISTENS;
-  const marks = entry.wordMarks ?? {};
-  const marksCount = Object.values(marks).reduce((a, b) => a + b, 0);
-
-  const applySegment = useCallback((s: Segment) => {
-    setSeg(s); setLoading(false); setNeedsText(false);
-    localStorage.setItem(cacheKey, JSON.stringify(s));
-  }, [cacheKey]);
-
-  const loadFromTranscript = async () => {
-    setBusyPaste(true);
-    try {
-      const r = await fetch(source?.pasteUrl ?? "/api/youtube-lab", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: `https://www.youtube.com/watch?v=${item.videoId}`, level: item.level, transcript: paste }) });
-      const d = await r.json();
-      if (!r.ok || d.needsTranscript) return;
-      applySegment({ title: d.title, author: d.author, start: 0, passage: d.transcript, chunks: (d.chunks ?? []).map((c: { phrase: string; meaning: string; context: string }) => ({ word: c.phrase, part_of_speech: "spoken chunk", meaning: c.meaning, example: c.context })), shadows: d.shadowLines ?? [], questions: d.questions ?? [], frames: d.answerFrames ?? [], writingPrompt: d.writingPrompt ?? "Retell this scene in your own words.", thinkPrompts: d.thinkPrompts ?? ["Narrate the scene in your head in English.", "When a word is missing, say it a simpler way.", "Turn one line into a sentence about your life."], wordCount: d.transcript.split(/\s+/).length, challenge });
-    } finally { setBusyPaste(false); }
-  };
-
+/* Writing that serves speaking: write → read out loud → say without looking → rephrase */
+function WriteToSpeak({ storageKey, prompt, model, accent, level }: { storageKey: string; prompt: string; model: string; accent: Accent; level: string }) {
+  const [tab, setTab] = useState<"write" | "dictation">("write");
+  const [text, setText] = useState("");
+  const [dict, setDict] = useState("");
+  const [read, setRead] = useState(false);
+  const [blind, setBlind] = useState(false);
   useEffect(() => {
-    stopNeural();
-    setLoading(true); setSeg(null); setNeedsText(false); setThinkDone([false, false, false]);
-    const cached = localStorage.getItem(cacheKey);
-    if (cached) { applySegment(JSON.parse(cached) as Segment); return; }
-    let alive = true;
-    const url = source?.fetchUrl ?? `/api/lesson?v=${item.videoId}&level=${item.level}&seg=${item.seg}`;
-    fetch(url)
-      .then((r) => r.json())
-      .then((d) => {
-        if (!alive) return;
-        if (d.needsTranscript) { setLoading(false); setNeedsText(true); }
-        else { if (challenge) d.challenge = challenge; applySegment(d as Segment); }
-      })
-      .catch(() => alive && (setLoading(false), setNeedsText(true)));
-    return () => { alive = false; };
-  }, [item, cacheKey, applySegment, source, challenge]);
-
-  const playScene = () => {
-    if (!seg) return;
-    stopNeural(); setPlayingAll(true);
-    playNeural(seg.passage, { voice: item.voice, level: item.level, rate, onEnd: () => { setPlayingAll(false); const listens = entry.listens + 1; onChange({ listens, readingUnlocked: entry.readingUnlocked || listens >= UNLOCK_LISTENS }); } });
-  };
-  const setMarks = (m: Record<string, number>) => onChange({ wordMarks: m });
-  const canComplete = unlocked && marksCount > 0 && entry.speakingDone;
-  const chunks = seg?.chunks ?? [];
-  const shadows = seg?.shadows ?? [];
-  const questions = seg?.questions ?? [];
-  const frames = seg?.frames ?? [];
+    setText(localStorage.getItem(`${storageKey}-w`) ?? "");
+    setDict(localStorage.getItem(`${storageKey}-d`) ?? "");
+  }, [storageKey]);
+  const target = { A1: 30, A2: 40, B1: 45, B2: 60, C1: 75, C2: 90 }[level] ?? 45;
+  const norm = (s: string) => s.toLowerCase().replace(/[^a-z\s']/g, " ").replace(/\s+/g, " ").trim();
+  const dictTarget = useMemo(() => toSentences(model).filter((s) => s.split(/\s+/).length <= 12)[0] ?? model, [model]);
+  const match = dict && norm(dict) === norm(dictTarget);
 
   return (
-    <div className="rts-fade">
-      <button onClick={onClose} className="mb-6 inline-flex items-center gap-2 text-sm font-medium transition hover:opacity-80" style={{ color: "var(--muted)" }}><span>←</span> {source?.backLabel ?? "Back to scenes"}</button>
+    <div className="rounded-2xl border p-4" style={{ borderColor: "var(--line)", backgroundColor: "var(--card)" }}>
+      <div className="flex gap-2">
+        {([["write", "Write & speak"], ["dictation", "Dictation"]] as const).map(([k, l]) => (
+          <button key={k} onClick={() => setTab(k)} className="rounded-full px-3 py-1.5 text-[12px] font-bold"
+            style={{ backgroundColor: tab === k ? accent.solid : "var(--paper)", color: tab === k ? "#fff" : "var(--muted)" }}>{l}</button>
+        ))}
+      </div>
 
-      <header className="rounded-3xl border p-7" style={{ borderColor: "var(--line)", backgroundColor: "var(--card)" }}>
-        <div className="flex flex-wrap items-center gap-3 text-[11px] font-semibold uppercase tracking-[.16em]" style={{ color: acc.text }}>
-          <span className="rounded-full px-2.5 py-1 text-white" style={{ backgroundColor: acc.solid }}>{source?.badge ?? `Unit ${String(item.number).padStart(2, "0")} · ${item.level}`}</span>
-          <span style={{ color: "var(--muted)" }}>{seg?.author ?? "Loading…"}</span>
-        </div>
-        <h1 className="mt-4 font-display text-[clamp(1.7rem,4vw,2.5rem)] font-semibold leading-tight">{seg?.title ?? `Scene ${item.number}`}</h1>
-        <div className="mt-4 rounded-2xl px-4 py-3" style={{ backgroundColor: "var(--accent-soft)" }}>
-          <p className="text-[11px] font-bold uppercase tracking-[.14em]" style={{ color: acc.text }}>Speaking goal</p>
-          <p className="mt-1 text-[15px] font-semibold leading-snug">{item.summary}</p>
-        </div>
-      </header>
-
-      {loading && <div className="mt-8 rounded-3xl border p-10 text-center" style={{ borderColor: "var(--line)", backgroundColor: "var(--card)", color: "var(--muted)" }}>Opening the scene…</div>}
-
-      {needsText && (
-        <div className="mt-6 rounded-3xl border p-6" style={{ borderColor: "var(--line)", backgroundColor: "var(--card)" }}>
-          <SceneEmbed videoId={item.videoId} start={0} title="Scene" />
-          <p className="mt-4 text-sm leading-relaxed" style={{ color: "var(--muted)" }}>
-            The video is ready above. On YouTube tap <b>⋯ → Show transcript</b>, copy 30–90 seconds with English captions, and paste them below — the full scene lesson builds instantly.
-          </p>
-          <textarea value={paste} onChange={(e) => setPaste(e.target.value)} rows={7} placeholder="Paste the English transcript here…"
-            className="mt-3 w-full rounded-2xl border p-3 text-sm outline-none" style={{ borderColor: "var(--line)", backgroundColor: "var(--paper)", color: "var(--ink)" }} />
-          <button onClick={loadFromTranscript} disabled={busyPaste || paste.trim().split(/\s+/).length < 15} className="mt-3 rounded-full px-5 py-2.5 text-sm font-bold text-white disabled:opacity-40" style={{ backgroundColor: acc.solid }}>{busyPaste ? "Building…" : "Build the full lesson"}</button>
-        </div>
-      )}
-
-      {seg && (
+      {tab === "write" ? (
         <>
-          {/* watch */}
-          <section className="mt-6">
-            <SectionKicker acc={acc}>1 · Watch</SectionKicker>
-            <SceneEmbed videoId={item.videoId} start={source?.videoStart ?? seg.start} title={seg.title} />
-          </section>
-
-          {/* listen */}
-          <section className="mt-8 rounded-3xl border p-5" style={{ borderColor: "var(--line)", backgroundColor: "var(--card)" }}>
-            <SectionKicker acc={acc}>2 · Listen · {seg.wordCount} words of real speech</SectionKicker>
-            <div className="mt-3 flex flex-wrap items-center gap-3">
-              <button onClick={playingAll ? () => { stopNeural(); setPlayingAll(false); } : playScene} className="inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-bold text-white" style={{ backgroundColor: acc.solid }}>
-                {playingAll ? "❚❚ Stop" : "▶ Listen to the scene"}
-              </button>
-              <label className="flex items-center gap-2 text-sm" style={{ color: "var(--muted)" }}>Speed
-                <select value={rate} onChange={(e) => setRate(Number(e.target.value))} className="rounded-lg border px-2 py-1.5 text-sm" style={{ borderColor: "var(--line)", backgroundColor: "var(--paper)", color: "var(--ink)" }}>
-                  <option value={0.75}>0.75×</option><option value={0.9}>0.9×</option><option value={1}>1×</option><option value={1.15}>1.15×</option>
-                </select>
-              </label>
-              <span className="text-[12px]" style={{ color: "var(--muted)" }}>{entry.listens} listen{entry.listens === 1 ? "" : "s"} · same General American voice everywhere</span>
-            </div>
-          </section>
-
-          {/* shadow */}
-          <section className="mt-8">
-            <SectionKicker acc={acc}>3 · Shadow — copy the rhythm, 3× each</SectionKicker>
-            <div className="mt-3 grid gap-2 sm:grid-cols-2">
-              {shadows.map((line) => (
-                <div key={line} className="flex items-center gap-3 rounded-2xl border p-4" style={{ borderColor: "var(--line)", backgroundColor: "var(--card)" }}>
-                  <Talk text={line} level={item.level} voice={item.voice} label="Shadow this line" />
-                  <span className="text-[15px] font-semibold leading-snug">{line}</span>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          {/* chunks */}
-          <section className="mt-8">
-            <div className="flex flex-wrap items-end justify-between gap-2">
-              <SectionKicker acc={acc}>4 · Steal these phrases</SectionKicker>
-              <span className="rounded-full border px-3 py-1.5 text-[13px] font-semibold" style={{ borderColor: "var(--line)", color: "var(--muted)" }}>{marksCount} used</span>
-            </div>
-            <ul className="mt-3 divide-y divide-[color:var(--line)] rounded-2xl border" style={{ borderColor: "var(--line)", backgroundColor: "var(--card)" }}>
-              {chunks.map((w) => (
-                <li key={w.word} className="flex items-start justify-between gap-3 p-4">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-display text-lg font-semibold">{w.word}</span>
-                      <Talk text={`${w.word}. ${w.example}`} level={item.level} voice={item.voice} label="Hear phrase and example" />
-                      <RealVideosButton query={w.word} accent={acc} />
-                    </div>
-                    <p className="mt-1 text-[13px]" style={{ color: "var(--muted)" }}>{w.meaning}</p>
-                    <p className="mt-0.5 text-[14px] italic" style={{ color: "var(--muted)" }}>“{w.example}”</p>
-                  </div>
-                  <div className="flex shrink-0 gap-1">
-                    {Array.from({ length: MAX_MARKS }).map((_, i) => (
-                      <button key={i} onClick={() => { const c = marks[w.word] ?? 0; const next = c === i + 1 ? i : i + 1; setMarks({ ...marks, [w.word]: next }); }}
-                        className="h-6 w-6 rounded-md border" style={{ borderColor: acc.line, backgroundColor: i < (marks[w.word] ?? 0) ? acc.solid : "var(--paper)" }} aria-label={`mark ${i + 1}`} />
-                    ))}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </section>
-
-          {/* transcript */}
-          {unlocked ? (
-            <section className="mt-8 rounded-3xl border p-6" style={{ borderColor: "var(--line)", backgroundColor: "var(--card)" }}>
-              <div className="flex items-center justify-between gap-3">
-                <SectionKicker acc={acc}>5 · Read the scene</SectionKicker>
-                <Talk text={seg.passage} level={item.level} voice={item.voice} label="Read along" />
-              </div>
-              <p className="mt-3 text-[15px] leading-[1.85]">{seg.passage}</p>
-            </section>
-          ) : (
-            <div className="mt-8 rounded-3xl border border-dashed p-10 text-center text-sm" style={{ borderColor: "var(--line)", color: "var(--muted)" }}>Press <b>Listen to the scene</b> once to open the transcript.</div>
-          )}
-
-          {/* think in English */}
-          <section className="mt-8 rounded-3xl border p-5" style={{ borderColor: "var(--line)", backgroundColor: "var(--card)" }}>
-            <SectionKicker acc={acc}>6 · Think in English — don't translate</SectionKicker>
-            <p className="mt-1 text-sm" style={{ color: "var(--muted)" }}>Micro-thoughts: short, speakable sentences inside your head. Do these silently, then say #3 out loud.</p>
-            <ul className="mt-3 space-y-2">
-              {seg.thinkPrompts.map((p, i) => (
-                <li key={p}>
-                  <button onClick={() => { const n = [...thinkDone]; n[i] = !n[i]; setThinkDone(n); }} className="flex w-full items-start gap-3 rounded-2xl border p-3 text-left" style={{ borderColor: thinkDone[i] ? acc.solid : "var(--line)", backgroundColor: thinkDone[i] ? "var(--accent-soft)" : "var(--paper)" }}>
-                    <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full text-[11px] font-bold text-white" style={{ backgroundColor: acc.solid }}>{i + 1}</span>
-                    <span className="text-sm font-medium">{p}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </section>
-
-          {/* speak */}
-          <section className="mt-8">
-            <SectionKicker acc={acc}>7 · Speak out loud</SectionKicker>
-            <ul className="mt-3 space-y-3">
-              {questions.map((p, i) => (
-                <li key={p} className="rounded-2xl border p-4" style={{ borderColor: "var(--line)", backgroundColor: "var(--card)" }}>
-                  <div className="flex gap-3"><span className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-[13px] font-semibold text-white" style={{ backgroundColor: acc.solid }}>{i + 1}</span>
-                    <div><p className="text-[15px] font-medium leading-snug">{p}</p>{frames[i] && <p className="mt-2 text-[13px] font-semibold" style={{ color: acc.text }}>Start with: <em>“{frames[i]}”</em></p>}</div>
-                  </div>
-                </li>
-              ))}
-            </ul>
-            <Recorder accent={acc} />
-
-            {/* Speaking challenge */}
-            {(seg.challenge || challenge) && (
-              <div className="mt-5 rounded-3xl border-2 p-5" style={{ borderColor: acc.solid, backgroundColor: "var(--accent-soft)" }}>
-                <p className="text-[11px] font-bold uppercase tracking-[.18em]" style={{ color: acc.text }}>🎤 Speaking challenge · 60 seconds</p>
-                <p className="mt-2 text-[16px] font-semibold leading-snug">{seg.challenge ?? challenge}</p>
-                <p className="mt-2 text-[13px]" style={{ color: "var(--muted)" }}>Use at least two phrases from step 4. Start even if it isn't perfect — the goal is to speak without translating.</p>
-              </div>
-            )}
-
-            <label className="mt-4 flex cursor-pointer items-center gap-3 rounded-2xl border p-4 text-[15px] font-medium" style={{ borderColor: "var(--line)", backgroundColor: "var(--card)" }}>
-              <input type="checkbox" checked={entry.speakingDone} onChange={(e) => onChange({ speakingDone: e.target.checked })} className="h-5 w-5" />
-              I answered every prompt and did the speaking challenge out loud.
-            </label>
-          </section>
-
-          {/* write */}
-          <section className="mt-8">
-            <SectionKicker acc={acc}>8 · Write</SectionKicker>
-            <div className="mt-3"><WritingLab storageKey={`rts-writing-${item.key}`} model={seg.passage} prompt={seg.writingPrompt} accent={acc} level={item.level} /></div>
-          </section>
-
-          {/* complete */}
-          <section className="mt-10">
-            {entry.completed ? (
-              <div className="rounded-3xl border p-8 text-center" style={{ borderColor: acc.line, backgroundColor: "var(--accent-soft)" }}>
-                <p className="font-display text-xl font-semibold" style={{ color: acc.text }}>Scene complete.</p>
-                <p className="mt-1 text-sm" style={{ color: "var(--muted)" }}>You watched, listened, shadowed, thought, spoke, and wrote in English.</p>
-                <button onClick={() => onChange({ completed: false })} className="mt-3 text-sm font-semibold underline" style={{ color: acc.text }}>Reopen</button>
-              </div>
-            ) : (
-              <button disabled={!canComplete} onClick={() => onChange({ completed: true })} className="w-full rounded-2xl px-6 py-4 font-semibold text-white transition disabled:opacity-40" style={{ backgroundColor: acc.solid }}>
-                {canComplete ? "Finish this scene" : "Listen once, mark a phrase, and speak to finish"}
-              </button>
-            )}
-          </section>
+          <p className="mt-3 text-[13px]" style={{ color: "var(--muted)" }}>{prompt}</p>
+          <textarea value={text} onChange={(e) => { setText(e.target.value); try { localStorage.setItem(`${storageKey}-w`, e.target.value); } catch {} }}
+            rows={5} placeholder="5–6 short sentences…"
+            className="mt-2 w-full rounded-xl border p-3 text-sm outline-none" style={{ borderColor: "var(--line)", backgroundColor: "var(--paper)", color: "var(--ink)" }} />
+          <p className="mt-1 text-[11px]" style={{ color: "var(--muted)" }}>{text.trim() ? text.trim().split(/\s+/).length : 0} / {target} words</p>
+          <div className="mt-3 space-y-2">
+            <StepRow done={read} onClick={() => { setRead(true); stopNeural(); playNeural(text || model, { voice: LEVEL_VOICE, level }); }} n={1} label="Read it out loud" accent={accent} />
+            <StepRow done={blind} onClick={() => setBlind(true)} n={2} label="Say it without looking" accent={accent} />
+            <StepRow done={false} onClick={() => {}} n={3} label="Say it again using different words" accent={accent} recorder />
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="mt-3 flex items-center gap-2">
+            <PlayButton text={dictTarget} level={level} label="Play dictation" size="md" />
+            <span className="text-[13px]" style={{ color: "var(--muted)" }}>Listen · type · then say it.</span>
+          </div>
+          <textarea value={dict} onChange={(e) => { setDict(e.target.value); try { localStorage.setItem(`${storageKey}-d`, e.target.value); } catch {} }}
+            rows={3} className="mt-2 w-full rounded-xl border p-3 text-sm outline-none" style={{ borderColor: "var(--line)", backgroundColor: "var(--paper)", color: "var(--ink)" }} />
+          {dict && <p className="mt-2 text-[13px] font-semibold" style={{ color: match ? "#46b78c" : "#e0a368" }}>{match ? "✓ Matched — now say it out loud" : "Compare, then say it:"}</p>}
+          {dict && !match && <p className="mt-1 rounded-xl p-2.5 text-[13px]" style={{ backgroundColor: "var(--paper)", color: "var(--muted)" }}>{dictTarget}</p>}
+          {match && <div className="mt-2"><SimpleRecorder compact label="🎙 Say the sentence" /></div>}
         </>
       )}
     </div>
   );
 }
 
-function SectionKicker({ children, acc }: { children: React.ReactNode; acc: Accent }) {
-  return <p className="text-[11px] font-bold uppercase tracking-[.18em]" style={{ color: acc.text }}>{children}</p>;
+function StepRow({ done, onClick, n, label, accent, recorder }: { done: boolean; onClick: () => void; n: number; label: string; accent: Accent; recorder?: boolean }) {
+  return (
+    <button onClick={onClick} className="flex w-full items-center gap-3 rounded-xl border p-3 text-left text-[14px] font-medium"
+      style={{ borderColor: done ? accent.solid : "var(--line)", backgroundColor: done ? "var(--accent-soft)" : "var(--paper)", color: "var(--ink)" }}>
+      <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-[11px] font-bold text-white" style={{ backgroundColor: accent.solid }}>{done ? "✓" : n}</span>
+      {label}
+      {recorder && <span className="ml-auto"><SimpleRecorder compact label="🎙" /></span>}
+    </button>
+  );
+}
+
+function SectionHead({ n, title, done }: { n: number; title: string; done?: boolean }) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="grid h-6 w-6 place-items-center rounded-full text-[11px] font-bold" style={{ backgroundColor: done ? "#2ea88f" : "var(--line)", color: done ? "#fff" : "var(--muted)" }}>{done ? "✓" : n}</span>
+      <p className="text-[12px] font-bold uppercase tracking-[.16em]" style={{ color: "var(--accent-text)" }}>{title}</p>
+    </div>
+  );
+}
+
+/* -------------------------------- detail -------------------------------- */
+export default function UnitDetail({ item, entry, onChange, onClose, source, challenge, inlineLesson }: {
+  item: LearningItem; entry: ProgressEntry; onChange: (p: Partial<ProgressEntry>) => void; onClose: () => void;
+  source?: LessonSource; challenge?: string;
+  /** Pre-built lesson (e.g. a pasted YouTube video) that skips fetching. */
+  inlineLesson?: Segment | null;
+}) {
+  const acc = accents[item.accent];
+  const [seg, setSeg] = useState<Segment | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [needsText, setNeedsText] = useState(false);
+  const [paste, setPaste] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [rate, setRate] = useState(1);
+  const [playing, setPlaying] = useState(false);
+  const [phraseMarks, setPhraseMarks] = useState<Record<string, boolean>>({});
+  const [shadowDone, setShadowDone] = useState(0);
+  const [ladderDone, setLadderDone] = useState(false);
+  const [challengeDone, setChallengeDone] = useState(false);
+  const cacheKey = source?.cacheKey ?? `rts-seg-${item.level}-${item.videoId}-${item.seg}`;
+
+  const applySegment = useCallback((s: Segment) => { setSeg(s); setLoading(false); setNeedsText(false); try { localStorage.setItem(cacheKey, JSON.stringify(s)); } catch {} }, [cacheKey]);
+
+  const loadFromTranscript = async () => {
+    setBusy(true);
+    try {
+      const r = await fetch(source?.pasteUrl ?? "/api/youtube-lab", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: `https://www.youtube.com/watch?v=${item.videoId}`, level: item.level, transcript: paste }) });
+      const d = await r.json();
+      if (!r.ok || d.needsTranscript) return;
+      applySegment({ title: d.title, author: d.author, start: 0, passage: d.transcript, chunks: (d.chunks ?? []).map((c: { phrase: string; meaning: string; context: string }) => ({ word: c.phrase, part_of_speech: "spoken chunk", meaning: c.meaning, example: c.context })), shadows: d.shadowLines ?? [], questions: d.questions ?? [], frames: d.answerFrames ?? [], writingPrompt: d.writingPrompt ?? "", thinkPrompts: d.thinkPrompts ?? [], wordCount: d.transcript.split(/\s+/).length, challenge });
+    } finally { setBusy(false); }
+  };
+
+  useEffect(() => {
+    stopNeural();
+    setLoading(true); setSeg(null); setNeedsText(false); setLadderDone(false); setChallengeDone(false);
+    // Pre-built lesson (pasted video): render the exact same engine, no fetch.
+    if (inlineLesson) {
+      applySegment({ ...inlineLesson, challenge: inlineLesson.challenge ?? challenge });
+      return;
+    }
+    const cached = localStorage.getItem(cacheKey);
+    if (cached) { applySegment(JSON.parse(cached) as Segment); return; }
+    let alive = true;
+    fetch(source?.fetchUrl ?? `/api/lesson?v=${item.videoId}&level=${item.level}&seg=${item.seg}`)
+      .then((r) => r.json())
+      .then((d) => { if (!alive) return; d.needsTranscript ? (setLoading(false), setNeedsText(true)) : (challenge && (d.challenge = challenge), applySegment(d as Segment)); })
+      .catch(() => alive && (setLoading(false), setNeedsText(true)));
+    return () => { alive = false; };
+  }, [item, cacheKey, applySegment, source, challenge, inlineLesson]);
+
+  const playAll = () => {
+    if (!seg) return;
+    stopNeural(); setPlaying(true);
+    playNeural(seg.passage, { voice: LEVEL_VOICE, level: item.level, rate, onEnd: () => { setPlaying(false); const l = entry.listens + 1; onChange({ listens: l, readingUnlocked: entry.readingUnlocked || l >= UNLOCK_LISTENS }); } });
+  };
+
+  // completion requires the speaking work
+  const phrasesPracticed = Object.keys(phraseMarks).filter((k) => phraseMarks[k]).length;
+  const steps = {
+    listen: entry.readingUnlocked || entry.listens >= 1,
+    shadow: shadowDone >= 3,
+    phrases: phrasesPracticed >= 3,
+    build: ladderDone,
+    challenge: challengeDone,
+  };
+  const canComplete = steps.listen && steps.shadow && steps.phrases && steps.build && steps.challenge;
+
+  const markPhrase = (w: string, v: boolean) => setPhraseMarks((m) => ({ ...m, [w]: v }));
+
+  const client = useMemo(() => (seg ? isClientContext(source?.topic ?? item.topic, seg.passage, seg.challenge ?? challenge) : false), [seg, source, item.topic, challenge]);
+  const ladder = useMemo(() => (seg ? buildLadder({ chunks: seg.chunks, question: seg.questions[3] ?? seg.questions[0] ?? item.summary, client }) : null), [seg, client, item.summary]);
+  const stems = useMemo(() => (seg ? buildStems(seg.questions[0] ?? item.summary, seg.chunks) : []), [seg, item.summary]);
+  const think = useMemo(() => (seg ? (seg.thinkPrompts?.length === 3 ? seg.thinkPrompts : thinkTasks(seg.passage, client)) : []), [seg, client]);
+  const prep = useMemo(() => (seg ? challengePrep(seg.chunks, seg.frames, seg.passage, client) : null), [seg, client]);
+
+  return (
+    <div className="rts-fade">
+      <button onClick={onClose} className="mb-5 inline-flex items-center gap-2 text-sm font-medium" style={{ color: "var(--muted)" }}><span>←</span> {source?.backLabel ?? "Back"}</button>
+
+      <header className="rounded-3xl border p-6 sm:p-7" style={{ borderColor: "var(--line)", backgroundColor: "var(--card)" }}>
+        <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-[.15em]" style={{ color: acc.text }}>
+          <span className="rounded-full px-2.5 py-1 text-white" style={{ backgroundColor: acc.solid }}>{source?.badge ?? `Unit ${item.number} · ${item.level}`}</span>
+          <span style={{ color: "var(--muted)" }}>{seg?.author ?? "Loading…"}</span>
+        </div>
+        <h1 className="mt-3 font-display text-[clamp(1.5rem,4vw,2.2rem)] font-semibold leading-tight">{seg?.title ?? item.title}</h1>
+        <p className="mt-2 rounded-xl px-3 py-2 text-[14px] font-semibold leading-snug" style={{ backgroundColor: "var(--accent-soft)", color: "var(--ink)" }}>🎯 {item.summary}</p>
+      </header>
+
+      {loading && <div className="mt-6 rounded-3xl border p-10 text-center text-sm" style={{ borderColor: "var(--line)", backgroundColor: "var(--card)", color: "var(--muted)" }}>Loading the lesson…</div>}
+
+      {needsText && (
+        <div className="mt-6 rounded-3xl border p-6" style={{ borderColor: "var(--line)", backgroundColor: "var(--card)" }}>
+          <SceneEmbed videoId={item.videoId} start={source?.videoStart ?? 0} title="Lesson" />
+          <p className="mt-4 text-sm" style={{ color: "var(--muted)" }}>The video is ready. On YouTube tap <b>⋯ → Show transcript</b>, copy 30–90 seconds, and paste below.</p>
+          <textarea value={paste} onChange={(e) => setPaste(e.target.value)} rows={7} placeholder="Paste the English transcript…" className="mt-3 w-full rounded-2xl border p-3 text-sm outline-none" style={{ borderColor: "var(--line)", backgroundColor: "var(--paper)", color: "var(--ink)" }} />
+          <button onClick={loadFromTranscript} disabled={busy || paste.trim().split(/\s+/).length < 15} className="mt-3 rounded-full px-5 py-2.5 text-sm font-bold text-white disabled:opacity-40" style={{ backgroundColor: acc.solid }}>{busy ? "Building…" : "Build lesson"}</button>
+        </div>
+      )}
+
+      {seg && ladder && prep && (
+        <div className="mt-6 space-y-8">
+          {/* 1 watch */}
+          <section>
+            <SectionHead n={1} title="Watch" done={steps.listen} />
+            <div className="mt-2"><SceneEmbed videoId={item.videoId} start={source?.videoStart ?? seg.start} title={seg.title} /></div>
+          </section>
+
+          {/* 2 listen + interactive transcript */}
+          <section className="rounded-3xl border p-4 sm:p-5" style={{ borderColor: "var(--line)", backgroundColor: "var(--card)" }}>
+            <SectionHead n={2} title={`Listen · ${seg.wordCount} words`} done={steps.listen} />
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <button onClick={playing ? () => { stopNeural(); setPlaying(false); } : playAll} className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-[13px] font-bold text-white" style={{ backgroundColor: acc.solid }}>
+                {playing ? "■ Stop" : "▶ Play all"}
+              </button>
+              <label className="flex items-center gap-1.5 text-[12px]" style={{ color: "var(--muted)" }}>Speed
+                <select value={rate} onChange={(e) => setRate(Number(e.target.value))} className="rounded-lg border px-2 py-1 text-[12px]" style={{ borderColor: "var(--line)", backgroundColor: "var(--paper)", color: "var(--ink)" }}>
+                  <option value={0.8}>0.8×</option><option value={1}>1×</option><option value={1.15}>1.15×</option>
+                </select>
+              </label>
+            </div>
+            <div className="mt-3"><InteractiveTranscript passage={seg.passage} level={item.level} compact /></div>
+          </section>
+
+          {/* 3 shadow */}
+          <section>
+            <SectionHead n={3} title="Shadow · listen, copy, repeat without looking" done={steps.shadow} />
+            <p className="mb-2 mt-1 text-[12px]" style={{ color: "var(--muted)" }}>Listen → shadow out loud → hide & repeat.</p>
+            <ShadowDrill lines={seg.shadows.slice(0, 6)} level={item.level} onProgress={(n) => setShadowDone(n)} />
+          </section>
+
+          {/* 4 phrases */}
+          <section>
+            <SectionHead n={4} title={`Phrases · ${phrasesPracticed} practiced`} done={steps.phrases} />
+            <p className="mb-2 mt-1 text-[12px]" style={{ color: "var(--muted)" }}>Listen · repeat · then build your own sentence. Don't collect words — use them.</p>
+            <PhrasePractice chunks={seg.chunks.slice(0, 8)} level={item.level} context={client ? "client" : "everyday"}
+              marks={entry.wordMarks ?? {}} setMark={(w, v) => onChange({ wordMarks: { ...(entry.wordMarks ?? {}), [w]: v } })}
+              practiced={phraseMarks} setPracticed={markPhrase} />
+          </section>
+
+          {/* 5 build */}
+          <section>
+            <SectionHead n={5} title="Build your answer" done={steps.build} />
+            <p className="mb-2 mt-1 text-[12px]" style={{ color: "var(--muted)" }}>Expand one idea step by step, then say it without looking.</p>
+            <BuildAnswer prompt={seg.questions[0] ?? item.summary} level={item.level} stems={stems} storageKey={`${cacheKey}-build`} />
+          </section>
+
+          {/* 6 think */}
+          <section className="rounded-3xl border p-4 sm:p-5" style={{ borderColor: "var(--line)", backgroundColor: "var(--card)" }}>
+            <SectionHead n={6} title="Think in English · finish & personalize" />
+            <div className="mt-3 grid gap-2">
+              {think.map((t, i) => (
+                <ThinkRow key={i} n={i + 1} text={t} level={item.level} />
+              ))}
+            </div>
+          </section>
+
+          {/* 7 speak ladder */}
+          <section>
+            <SectionHead n={7} title="Speak step by step" done={ladderDone} />
+            <div className="mt-2"><SpeakingLadder level={item.level} rungs={ladder} storageKey={`${cacheKey}-ladder`} onComplete={() => { setLadderDone(true); onChange({ speakingDone: true }); }} /></div>
+          </section>
+
+          {/* 8 challenge */}
+          <section>
+            <SectionHead n={8} title="Speaking challenge" done={steps.challenge} />
+            <div className="mt-2">
+              <SpeakingChallenge
+                task={seg.challenge ?? challenge ?? item.summary}
+                phrases={prep.phrases} starters={prep.starters} ideas={prep.ideas} personalQuestion={prep.personalQuestion}
+                storageKey={`${cacheKey}-challenge`} onDone={() => { setChallengeDone(true); onChange({ speakingDone: true }); }} />
+            </div>
+          </section>
+
+          {/* 9 write */}
+          <section>
+            <SectionHead n={9} title="Write, then say it" />
+            <div className="mt-2"><WriteToSpeak storageKey={`rts-write-${item.key}-${source?.badge ?? item.seg}`} prompt={seg.writingPrompt} model={seg.passage} accent={acc} level={item.level} /></div>
+          </section>
+
+          {/* complete */}
+          <section className="rounded-3xl border p-6 text-center" style={{ borderColor: canComplete ? acc.solid : "var(--line)", backgroundColor: entry.completed ? "var(--accent-soft)" : "var(--card)" }}>
+            {entry.completed ? (
+              <>
+                <p className="font-display text-xl font-semibold" style={{ color: acc.text }}>Lesson complete</p>
+                <p className="mt-1 text-sm" style={{ color: "var(--muted)" }}>You actually used English today.</p>
+                <button onClick={() => onChange({ completed: false })} className="mt-3 text-sm font-semibold underline" style={{ color: acc.text }}>Reopen</button>
+              </>
+            ) : (
+              <>
+                <p className="text-sm font-semibold" style={{ color: "var(--ink)" }}>{canComplete ? "Ready" : "Complete the speaking steps:"}</p>
+                {!canComplete && (
+                  <ul className="mx-auto mt-2 max-w-xs space-y-1 text-left text-[13px]" style={{ color: "var(--muted)" }}>
+                    {!steps.listen && <li>• Listen once</li>}
+                    {!steps.shadow && <li>• Finish 3 shadow lines</li>}
+                    {!steps.phrases && <li>• Practice 3 phrases</li>}
+                    {!steps.build && <li>• Build your answer</li>}
+                    {!steps.challenge && <li>• Do the speaking challenge</li>}
+                  </ul>
+                )}
+                <button disabled={!canComplete} onClick={() => onChange({ completed: true, readingUnlocked: true })}
+                  className="mt-4 w-full rounded-2xl px-6 py-3.5 font-bold text-white transition disabled:opacity-40" style={{ backgroundColor: acc.solid }}>
+                  Finish lesson
+                </button>
+              </>
+            )}
+          </section>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ThinkRow({ n, text, level }: { n: number; text: string; level: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <button onClick={() => setOpen((v) => !v)} className="flex items-start gap-3 rounded-2xl border p-3 text-left"
+      style={{ borderColor: open ? "var(--accent-solid)" : "var(--line)", backgroundColor: open ? "var(--accent-soft)" : "var(--paper)" }}>
+      <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full text-[11px] font-bold text-white" style={{ backgroundColor: "var(--accent-solid)" }}>{n}</span>
+      <span className="flex-1 text-[14px] font-medium">{text}</span>
+      {open && <span className="mt-0.5"><PlayButton text={text} level={level} label="Hear the task" /></span>}
+    </button>
+  );
 }
 
 function SceneEmbed({ videoId, start, title }: { videoId: string; start: number; title: string }) {
   const [loaded, setLoaded] = useState(false);
   return (
-    <div className="overflow-hidden rounded-3xl border" style={{ borderColor: "var(--line)", backgroundColor: "#000" }}>
+    <div className="overflow-hidden rounded-2xl border" style={{ borderColor: "var(--line)", backgroundColor: "#000" }}>
       <div className="relative aspect-video w-full">
         {!loaded && (
-          <button onClick={() => setLoaded(true)} className="group absolute inset-0" aria-label={`Play ${title}`}>
+          <button onClick={() => setLoaded(true)} className="absolute inset-0" aria-label={`Play ${title}`}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={`https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`} alt="" className="h-full w-full object-cover opacity-80" />
+            <img src={`https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`} alt="" className="h-full w-full object-cover opacity-85" loading="lazy" />
             <span className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent" />
-            <span className="absolute left-1/2 top-1/2 grid h-16 w-16 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-[#c14b3d] text-white transition group-hover:scale-110">▶</span>
+            <span className="absolute left-1/2 top-1/2 grid h-14 w-14 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-[var(--accent-solid)] text-white">▶</span>
           </button>
         )}
         {loaded && <iframe className="absolute inset-0 h-full w-full" src={`https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&rel=0&cc_load_policy=1&hl=en&start=${start}`} title={title} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen />}

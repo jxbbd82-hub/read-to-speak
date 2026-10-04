@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
+import ThemeToggle from "@/components/ThemeToggle";
 
 // Research-backed trainer: micro-thoughts (3-sentence rule), action narration,
 // small self-decisions in English, and "inner blanks" (simplify around missing
@@ -65,11 +66,14 @@ export default function ThinkPage() {
 
   return (
     <main className="mx-auto max-w-3xl px-5 py-12 sm:py-16">
-      <div className="flex items-center gap-4 text-sm">
-        <Link href="/" style={{ color: "var(--muted)" }}>← Home</Link>
-        <Link href="/my-content" className="rounded-full bg-[#c14b3d] px-3 py-1.5 text-xs font-bold text-white">My Content</Link>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4 text-sm">
+          <Link href="/" style={{ color: "var(--muted)" }}>← Home</Link>
+          <Link href="/my-content" className="rounded-full px-3 py-1.5 text-xs font-bold text-white" style={{ backgroundColor: "var(--accent-solid)" }}>My Content</Link>
+        </div>
+        <ThemeToggle />
       </div>
-      <p className="mt-8 text-[11px] font-bold uppercase tracking-[.2em] text-[#5fd3b3]">5 minutes a day</p>
+      <p className="mt-8 text-[11px] font-bold uppercase tracking-[.2em]" style={{ color: "var(--accent-text)" }}>5 minutes a day</p>
       <h1 className="mt-3 font-display text-4xl font-semibold sm:text-5xl">Think in English.</h1>
       <p className="mt-4 leading-relaxed" style={{ color: "var(--muted)" }}>
         Your speaking is limited by how quickly you can form a thought in English. This trains the inner voice itself: short, speakable thoughts, no translation. Do it silently anywhere, then say #3 out loud.
@@ -85,19 +89,19 @@ export default function ThinkPage() {
       </div>
 
       <section className="mt-8 rounded-3xl border p-7" style={{ borderColor: "var(--line)", backgroundColor: "var(--card)" }}>
-        <p className="text-[12px] font-bold uppercase tracking-[.16em] text-[#5fd3b3]">Micro-thought {day + 1}/{DRILLS.length}</p>
+        <p className="text-[12px] font-bold uppercase tracking-[.16em]" style={{ color: "var(--accent-text)" }}>Micro-thought {day + 1}/{DRILLS.length}</p>
         <h2 className="mt-2 font-display text-3xl font-semibold">{drill.title}</h2>
         <p className="mt-1 text-sm" style={{ color: "var(--muted)" }}>{drill.why}</p>
         <div className="mt-5 rounded-2xl p-5" style={{ backgroundColor: "var(--paper)" }}>
           <p className="text-[17px] leading-relaxed">{drill.prompt}</p>
           <p className="mt-3 text-sm italic" style={{ color: "var(--muted)" }}>{drill.starter}</p>
-          <p className="mt-3 text-[13px] font-bold text-[#efac72]">⏱ {drill.time}s — think in English only. Missing a word? Go around it, don't switch languages.</p>
+          <p className="mt-3 text-[13px] font-bold text-[var(--accent-text)]">⏱ {drill.time}s — think in English only. Missing a word? Go around it, don't switch languages.</p>
         </div>
         <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} placeholder="Optional: write the thoughts you formed…" className="mt-4 w-full rounded-2xl border p-3 text-sm outline-none" style={{ borderColor: "var(--line)", backgroundColor: "var(--paper)", color: "var(--ink)" }} />
         <div className="mt-4 flex flex-wrap items-center gap-3">
-          <button onClick={record} className="rounded-full px-5 py-2.5 text-sm font-bold text-white" style={{ backgroundColor: recording ? "#b0473f" : "#2ea88f" }}>{recording ? "● Stop recording" : "🎙 Say it out loud"}</button>
+          <button onClick={record} className="rounded-full px-5 py-2.5 text-sm font-bold text-white" style={{ backgroundColor: recording ? "#b0473f" : "var(--accent-solid)" }}>{recording ? "● Stop recording" : "🎙 Say it out loud"}</button>
           {audioUrl && <audio src={audioUrl} controls className="h-10 min-w-0 flex-1" />}
-          <button onClick={complete} className="ml-auto rounded-full bg-[#c14b3d] px-6 py-2.5 text-sm font-bold text-white">Done — next drill →</button>
+          <button onClick={complete} className="ml-auto rounded-full px-6 py-2.5 text-sm font-bold text-white" style={{ backgroundColor: "var(--accent-solid)" }}>Done — next drill →</button>
         </div>
       </section>
 
@@ -109,7 +113,7 @@ export default function ThinkPage() {
           <li><b style={{ color: "var(--ink)" }}>3 · Anchor it to real moments.</b> Coffee, walking, dishes — narrate the moment you're already in.</li>
           <li><b style={{ color: "var(--ink)" }}>4 · Collect inner blanks.</b> After each drill, look up the 1–2 words you missed and shadow them in the lesson.</li>
         </ol>
-        <Link href="/learn/b1-core" className="mt-5 inline-block text-sm font-bold text-[#5fd3b3] underline">Back to the scenes →</Link>
+        <Link href="/learn/b1-core" className="mt-5 inline-block text-sm font-bold underline" style={{ color: "var(--accent-text)" }}>Back to the scenes →</Link>
       </section>
     </main>
   );

@@ -87,23 +87,63 @@ function parseTimedText(xml: string): { text: string; cues: TimedCue[] } {
   return { text: cues.map((c) => c.text).join(" ").replace(/\s+/g, " ").trim(), cues };
 }
 
-async function fetchTrackText(baseUrl: string, translate: boolean): Promise<{ text: string; cues: TimedCue[] } | null> {
-  const urls = translate
-    ? [`${baseUrl}&tlang=en`, baseUrl]
-    : [baseUrl];
-  for (const url of urls) {
-    const res = await fetch(url, { signal: AbortSignal.timeout(9000) });
-    if (!res.ok) continue;
-    const xml = await res.text();
-    if (!xml.startsWith("<?xml") && !xml.startsWith("<timedtext")) continue;
-    const parsed = parseTimedText(xml);
-    if (parsed.text.length > 30) return { text: parsed.text, cues: parsed.cues };
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+async function fetchTrackText(baseUrl: string, translate: boolean, allowRetry = true): Promise<{ text: string; cues: TimedCue[] } | null> {
+  // XML first, then a short backoff on transient 429s, then JSON3 as backup.
+  const variants = [
+    baseUrl,
+    baseUrl.includes("fmt=") ? baseUrl : `${baseUrl}&fmt=srv3`,
+  ];
+  const urls = translate ? variants.map((u) => `${u}&tlang=en`).concat(variants) : variants;
+  for (let attempt = 0; attempt < urls.length + 1; attempt++) {
+    const url = urls[Math.min(attempt, urls.length - 1)];
+    for (let retry = 0; retry < (allowRetry ? 2 : 1); retry++) {
+      try {
+        const res = await fetch(url, {
+          signal: AbortSignal.timeout(allowRetry ? 9000 : 5000),
+          headers: { "accept-language": "en-US,en;q=0.9" },
+        });
+        if (res.status === 429) { if (allowRetry) await sleep(400 * (retry + 1)); continue; }
+        if (!res.ok) break;
+        const body = await res.text();
+        if (body.startsWith("<?xml") || body.startsWith("<timedtext")) {
+          const parsed = parseTimedText(body);
+          if (parsed.text.length > 30) return { text: parsed.text, cues: parsed.cues };
+        }
+        if (body.trim().startsWith("{")) {
+          try {
+            const cues = parseJson3(body);
+            if (cues.length) {
+              const text = cues.map((c) => c.text).join(" ").replace(/\s+/g, " ").trim();
+              if (text.length > 30) return { text, cues };
+            }
+          } catch { /* ignore bad json */ }
+        }
+        break;
+      } catch {
+        break;
+      }
+    }
   }
   return null;
 }
 
+function parseJson3(json: string): TimedCue[] {
+  const data = JSON.parse(json) as { events?: Array<{ tStartMs?: number; dDurationMs?: number; segs?: Array<{ utf8?: string }> }> };
+  const cues: TimedCue[] = [];
+  for (const ev of data.events ?? []) {
+    const text = (ev.segs ?? []).map((s) => s.utf8 ?? "").join("").replace(/\n/g, " ").trim();
+    if (text) cues.push({ t: ev.tStartMs ?? 0, d: ev.dDurationMs ?? 1500, text });
+  }
+  return cues;
+}
+
 export async function fetchYouTubeCaptions(videoId: string, opts?: { fast?: boolean }): Promise<CaptionResult | null> {
-  const active = opts?.fast ? clients.slice(0, 2) : clients;
+  // Fast mode still retries a timedtext 429 once (most transient limits
+  // clear immediately), but uses a single client to stay quick.
+  const allowRetry = true;
+  const active = opts?.fast ? clients.slice(0, 1) : clients;
   for (const client of active) {
     try {
       const response = await fetch(`https://www.youtube.com/youtubei/v1/player?key=${client.key}&prettyPrint=false`, {
@@ -127,22 +167,29 @@ export async function fetchYouTubeCaptions(videoId: string, opts?: { fast?: bool
       const tracks = data.captions?.playerCaptionsTracklistRenderer?.captionTracks ?? [];
       if (!tracks.length) continue;
 
-      const english =
-        tracks.find((t) => (t.languageCode ?? "").toLowerCase() === "en-us" && t.kind !== "asr") ??
-        tracks.find((t) => (t.languageCode ?? "").toLowerCase() === "en" && t.kind !== "asr") ??
-        tracks.find((t) => (t.languageCode ?? "").toLowerCase().startsWith("en") && t.kind !== "asr") ??
-        tracks.find((t) => (t.languageCode ?? "").toLowerCase().startsWith("en"));
-      const chosen = english ?? tracks[0];
+      // Try English tracks in priority order, then translate any track.
+      const englishTracks = [
+        tracks.find((t) => (t.languageCode ?? "").toLowerCase() === "en-us" && t.kind !== "asr"),
+        tracks.find((t) => (t.languageCode ?? "").toLowerCase() === "en" && t.kind !== "asr"),
+        tracks.find((t) => (t.languageCode ?? "").toLowerCase().startsWith("en") && t.kind !== "asr"),
+        tracks.find((t) => (t.languageCode ?? "").toLowerCase().startsWith("en")),
+      ].filter((t): t is NonNullable<typeof t> => !!t);
+      const candidates = englishTracks.length ? englishTracks : tracks.slice(0, 2);
 
-      const translated = !english;
-      const parsed = await fetchTrackText(chosen.baseUrl, translated);
+      let parsed: { text: string; cues: TimedCue[] } | null = null;
+      let chosen = candidates[0];
+      for (const tr of candidates) {
+        const isEnglish = (tr.languageCode ?? "").toLowerCase().startsWith("en");
+        const p = await fetchTrackText(tr.baseUrl, !isEnglish, allowRetry);
+        if (p && p.text.length > 30) { parsed = p; chosen = tr; break; }
+      }
       if (!parsed || parsed.text.length < 30) continue;
 
       return {
         transcript: parsed.text,
         cues: parsed.cues,
         language: chosen.languageCode ?? "unknown",
-        translated: translated && parsed.text.length > 30,
+        translated: !(chosen.languageCode ?? "").toLowerCase().startsWith("en"),
         title: data.videoDetails?.title,
         author: data.videoDetails?.author,
         lengthSeconds: data.videoDetails?.lengthSeconds,

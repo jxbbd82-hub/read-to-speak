@@ -73,7 +73,7 @@ export default function BookExperience({ items, level, nextCourse }: { items: Le
       <section id="units" className="mx-auto mt-16 max-w-5xl scroll-mt-24 px-6">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#5fd3b3]">Choose a unit</p>
+            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--accent-text)]">Choose a unit</p>
             <h2 className="mt-3 font-display text-[clamp(1.8rem,4vw,2.6rem)] font-semibold leading-tight">
               Listen. Shadow. Speak.
             </h2>
@@ -90,7 +90,7 @@ export default function BookExperience({ items, level, nextCourse }: { items: Le
         <p className="mt-3 text-[15px]" style={{ color: "var(--muted)" }}>Real clips from shows, movies, and interviews — you watch, shadow, think in English, speak, and write without noticing the lesson.</p>
 
         <div className="mt-6 overflow-hidden rounded-full" style={{ backgroundColor: "var(--line)" }}>
-          <div className="h-2 rounded-full bg-[#2ea88f] transition-all" style={{ width: `${unitTotal ? (completedCount / unitTotal) * 100 : 0}%` }} />
+          <div className="h-2 rounded-full bg-[var(--accent-solid)] transition-all" style={{ width: `${unitTotal ? (completedCount / unitTotal) * 100 : 0}%` }} />
         </div>
         <div className="mt-2 flex justify-between text-[12px]" style={{ color: "var(--muted)" }}>
           <span>{level ?? "Level"} path · {unitTotal} scenes</span>
@@ -139,7 +139,7 @@ export default function BookExperience({ items, level, nextCourse }: { items: Le
             <p className="text-[12px] font-bold uppercase tracking-[.16em]" style={{ color: "var(--accent-text)" }}>Level complete</p>
             <h3 className="mt-2 font-display text-2xl font-semibold">You finished all {unitTotal} scenes.</h3>
             <p className="mx-auto mt-2 max-w-xl text-sm leading-relaxed" style={{ color: "var(--muted)" }}>Before moving on, record the last speaking prompt again without notes. If your message is clear, you're ready.</p>
-            {nextCourse && <Link href={nextCourse.href} className="mt-5 inline-flex rounded-full bg-[#2ea88f] px-5 py-3 text-sm font-bold text-white">Continue to {nextCourse.label} →</Link>}
+            {nextCourse && <Link href={nextCourse.href} className="mt-5 inline-flex rounded-full bg-[var(--accent-solid)] px-5 py-3 text-sm font-bold text-white">Continue to {nextCourse.label} →</Link>}
           </div>
         )}
       </section>

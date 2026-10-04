@@ -5,23 +5,24 @@ import Link from "next/link";
 import type { LearningItem } from "@/data/courses";
 import { accents, type Accent, type ProgressEntry } from "@/lib/accents";
 import { loadProgress, saveProgress, loadProgressSync } from "@/lib/progressStore";
-import { myContentIntro, myContentLessons, MC_CATEGORY_LABEL, type McLesson } from "@/data/myContent";
+import { myContentLessons, myContentIntro } from "@/data/myContent";
+import { curriculumWeeks } from "@/data/curriculum";
 import UnitDetail from "@/components/UnitDetail";
+import ThemeToggle from "@/components/ThemeToggle";
 
 const empty: ProgressEntry = { listens: 0, readingUnlocked: false, wordMarks: {}, speakingDone: false, completed: false };
-const DAY_KEY = "rts-mc-day"; // the next day number to study (1-based, persisted)
+const DAY_KEY = "rts-mc-day";
 
 export default function MyContentPage() {
   const [progress, setProgress] = useState<Record<string, ProgressEntry>>({});
   const [day, setDay] = useState(1);
   const [selected, setSelected] = useState<string | null>(null);
-  const [showLibrary, setShowLibrary] = useState(false);
-  const [filter, setFilter] = useState<"all" | McLesson["category"]>("all");
+  const [openWeek, setOpenWeek] = useState<number>(1);
 
   useEffect(() => {
     setProgress(loadProgressSync());
     void loadProgress().then(setProgress);
-    setDay(Math.min(90, Math.max(1, Number(localStorage.getItem(DAY_KEY) ?? "1"))));
+    setDay(Math.min(myContentLessons.length, Math.max(1, Number(localStorage.getItem(DAY_KEY) ?? "1"))));
   }, []);
 
   const update = useCallback((key: string, patch: Partial<ProgressEntry>) => {
@@ -47,46 +48,26 @@ export default function MyContentPage() {
     return map;
   }, []);
 
-  const completedCount = myContentLessons.filter((l) => progress[l.id]?.completed).length;
-  const chunksLearned = myContentLessons.reduce(
-    (n, l) => n + Object.values(progress[l.id]?.wordMarks ?? {}).reduce((a, b) => a + b, 0),
-    0,
-  );
-  const streak = (() => {
-    let s = 0;
-    for (let i = 1; i <= 90; i++) {
-      const l = myContentLessons[i - 1];
-      if (progress[l.id]?.completed) s++;
-      else if (i < day) break;
-    }
-    return s;
-  })();
-
-  const today = myContentLessons[day - 1];
-  const next = myContentLessons.slice(day, day + 3);
+  const doneCount = myContentLessons.filter((l) => progress[l.id]?.completed).length;
+  const phrasesUsed = myContentLessons.reduce((n, l) => n + Object.values(progress[l.id]?.wordMarks ?? {}).reduce((a, b) => a + b, 0), 0);
   const selectedLesson = myContentLessons.find((l) => l.id === selected) ?? null;
-
-  const openLesson = (l: McLesson) => {
-    setSelected(l.id);
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
 
   const finishLesson = (p: Partial<ProgressEntry>) => {
     if (!selectedLesson) return;
-    const willComplete = p.completed ?? progress[selectedLesson.id]?.completed;
+    const will = p.completed ?? progress[selectedLesson.id]?.completed;
     update(selectedLesson.id, p);
-    if (willComplete && day <= 90) {
-      const nd = Math.min(90, Math.max(day + 1, selectedLesson.day + 1));
-      setDay(nd);
-      localStorage.setItem(DAY_KEY, String(nd));
+    if (will) {
+      const nd = Math.min(myContentLessons.length, selectedLesson.day + 1);
+      setDay(nd); localStorage.setItem(DAY_KEY, String(nd));
+      setOpenWeek(curriculumWeeks[Math.min(curriculumWeeks.length - 1, Math.floor((nd - 1) / 5))]?.stage ? Math.floor((nd - 1) / 5) + 1 : 1);
     }
   };
 
   if (selectedLesson && items[selectedLesson.id]) {
     return (
       <main className="min-h-screen pb-24">
-        <Header />
-        <section className="mx-auto mt-10 max-w-3xl px-6">
+        <Shell />
+        <section className="mx-auto mt-8 max-w-3xl px-5 sm:px-6">
           <UnitDetail
             item={items[selectedLesson.id]}
             entry={progress[selectedLesson.id] ?? empty}
@@ -95,12 +76,13 @@ export default function MyContentPage() {
             challenge={selectedLesson.focus}
             source={{
               fetchUrl: `/api/my-content?id=${selectedLesson.id}`,
-              cacheKey: `rts-mc-${selectedLesson.videoId}-${selectedLesson.day}`,
+              cacheKey: `rts-mc-${selectedLesson.id}`,
               pasteUrl: "/api/youtube-lab",
-              badge: `MY CONTENT · Day ${selectedLesson.day}`,
-              backLabel: "← Back to My Content",
+              badge: `MY TRACK · DAY ${selectedLesson.day}`,
+              backLabel: "← Back to my track",
               levelLabel: "B1",
               videoStart: selectedLesson.start,
+              topic: selectedLesson.tag,
             }}
           />
         </section>
@@ -108,118 +90,115 @@ export default function MyContentPage() {
     );
   }
 
-  const library = myContentLessons.filter((l) => filter === "all" || l.category === filter);
+  const todayLesson = myContentLessons[day - 1];
 
   return (
     <main className="min-h-screen pb-24">
-      <Header />
+      <Shell />
 
-      <section className="mx-auto mt-12 max-w-5xl px-6">
-        <p className="text-[12px] font-semibold uppercase tracking-[.2em] text-[#e88a7d]">Your personal track</p>
-        <h1 className="mt-2 font-display text-[clamp(2.2rem,5vw,3.4rem)] font-semibold leading-tight">MY CONTENT</h1>
-        <p className="mt-2 text-lg font-medium text-[var(--muted)]">{myContentIntro.tagline}</p>
+      <section className="mx-auto mt-12 max-w-4xl px-5 sm:px-6">
+        <p className="text-[12px] font-bold uppercase tracking-[.22em] text-[var(--accent-text)]">Your personal track</p>
+        <h1 className="mt-2 font-display text-[clamp(2rem,5vw,3rem)] font-semibold leading-tight tracking-tight">My 3-month speaking track</h1>
+        <p className="mt-2 max-w-2xl text-[15px] leading-relaxed text-[var(--muted)]">{myContentIntro.description}</p>
 
-        {/* compact stats */}
-        <div className="mt-5 flex flex-wrap gap-2 text-[13px]">
-          <Stat label="Days done" value={completedCount} />
-          <Stat label="Phrases used" value={chunksLearned} />
-          <Stat label="Current day" value={`${Math.min(day, 90)}/90`} />
+        <div className="mt-5 flex flex-wrap gap-x-6 gap-y-1.5 text-[13px] text-[var(--muted)]">
+          <span><strong className="text-[var(--ink)]">{doneCount}</strong> / {myContentLessons.length} lessons</span>
+          <span><strong className="text-[var(--ink)]">{phrasesUsed}</strong> phrases used</span>
+          <span>Week {Math.min(12, Math.ceil(day / 5))} of 12</span>
         </div>
-        <div className="mt-3 h-2 overflow-hidden rounded-full" style={{ backgroundColor: "var(--line)" }}>
-          <div className="h-full rounded-full bg-[#c14b3d] transition-all" style={{ width: `${(completedCount / 90) * 100}%` }} />
-        </div>
-
-        {/* TODAY */}
-        <div className="mt-10">
-          <p className="text-[12px] font-bold uppercase tracking-[.2em]" style={{ color: "var(--muted)" }}>Today</p>
-          <LessonCard lesson={today} large progress={progress[today.id]} onOpen={() => openLesson(today)} />
+        <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[var(--line)]">
+          <div className="h-full rounded-full bg-[var(--accent-solid)] transition-all" style={{ width: `${(doneCount / myContentLessons.length) * 100}%` }} />
         </div>
 
-        {/* NEXT */}
-        <div className="mt-8">
-          <p className="text-[12px] font-bold uppercase tracking-[.2em]" style={{ color: "var(--muted)" }}>Next</p>
-          <div className="mt-3 grid gap-4 sm:grid-cols-3">
-            {next.map((l) => (
-              <LessonCard key={l.id} lesson={l} progress={progress[l.id]} onOpen={() => openLesson(l)} />
-            ))}
+        {/* Today */}
+        {todayLesson && (
+          <div className="mt-9">
+            <p className="text-[11px] font-bold uppercase tracking-[.22em] text-[var(--muted)]">Today · Day {todayLesson.day}</p>
+            <div className="mt-2">
+              <LessonCard l={todayLesson} entry={progress[todayLesson.id]} onOpen={() => setSelected(todayLesson.id)} hero />
+            </div>
           </div>
-        </div>
+        )}
 
-        {/* LIBRARY */}
-        <div className="mt-10">
-          <button onClick={() => setShowLibrary((v) => !v)} className="flex items-center gap-2 text-sm font-semibold text-[#e88a7d]">
-            <span className="text-[12px] font-bold uppercase tracking-[.2em]">Library · 90 lessons</span>
-            <span>{showLibrary ? "▴" : "▾"}</span>
-          </button>
-          {showLibrary && (
-            <>
-              <div className="mt-4 flex flex-wrap gap-2">
-                {(["all", "everyday", "work", "design", "client"] as const).map((c) => (
-                  <button key={c} onClick={() => setFilter(c)} className="rounded-full px-3 py-1.5 text-[12px] font-semibold capitalize"
-                    style={{ backgroundColor: filter === c ? "#c14b3d" : "var(--card)", color: filter === c ? "#fff" : "var(--muted)", border: "1px solid var(--line)" }}>
-                    {c === "all" ? "All" : MC_CATEGORY_LABEL[c]}
-                  </button>
-                ))}
+        {/* Weeks / stages */}
+        <div className="mt-12 space-y-3">
+          {curriculumWeeks.map((week, wi) => {
+            const lessons = myContentLessons.filter((l) => l.week === wi + 1);
+            const weekDone = lessons.filter((l) => progress[l.id]?.completed).length;
+            const isOpen = openWeek === wi + 1;
+            const isCurrent = todayLesson?.week === wi + 1;
+            return (
+              <div key={wi} className="overflow-hidden rounded-2xl border bg-[var(--card)]" style={{ borderColor: "var(--line)" }}>
+                <button onClick={() => setOpenWeek(isOpen ? -1 : wi + 1)} className="flex w-full items-center justify-between gap-3 px-5 py-4 text-left">
+                  <span>
+                    <span className="block text-[11px] font-bold uppercase tracking-[.18em]" style={{ color: isCurrent ? "#1d6f5b" : "var(--muted)" }}>Week {wi + 1} · {weekDone}/{lessons.length}</span>
+                    <span className="mt-0.5 block font-display text-[17px] font-semibold">{week.stage.replace(/^Week \d+ · /, "")}</span>
+                  </span>
+                  <span className="text-[var(--muted)]">{isOpen ? "▾" : "▸"}</span>
+                </button>
+                {isOpen && (
+                  <div className="grid gap-2 border-t p-3 sm:grid-cols-2" style={{ borderColor: "var(--line)" }}>
+                    {lessons.map((l) => (
+                      <LessonCard key={l.id} l={l} entry={progress[l.id]} onOpen={() => setSelected(l.id)} compact />
+                    ))}
+                  </div>
+                )}
               </div>
-              <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {library.map((l) => (
-                  <LessonCard key={l.id} lesson={l} progress={progress[l.id]} onOpen={() => openLesson(l)} compact />
-                ))}
-              </div>
-            </>
-          )}
+            );
+          })}
         </div>
       </section>
     </main>
   );
 }
 
-function Header() {
+function Shell() {
   return (
-    <header className="sticky top-0 z-30 border-b backdrop-blur" style={{ borderColor: "var(--line)", backgroundColor: "rgba(11,14,17,.85)" }}>
-      <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-3">
+    <header className="sticky top-0 z-30 border-b backdrop-blur" style={{ borderColor: "var(--line)", backgroundColor: "var(--header-bg)" }}>
+      <div className="mx-auto flex max-w-5xl items-center justify-between px-5 py-3 sm:px-6">
         <Link href="/" className="flex items-center gap-2.5">
-          <span className="grid h-8 w-8 place-items-center rounded-lg bg-[#080a0d] font-display text-base font-semibold text-white">R</span>
+          <span className="grid h-8 w-8 place-items-center rounded-lg font-display text-base font-semibold" style={{ backgroundColor: "var(--mark-bg)", color: "var(--mark-fg)" }}>R</span>
           <span className="font-display text-lg font-semibold tracking-tight">Read to Speak</span>
         </Link>
-        <nav className="flex items-center gap-3 text-sm font-medium sm:gap-4" style={{ color: "var(--muted)" }}>
+        <nav className="flex items-center gap-2 text-sm font-medium text-[var(--muted)] sm:gap-3">
           <Link href="/learn/b1-core" className="hidden sm:inline">Levels</Link>
           <Link href="/think" className="hidden sm:inline">Think</Link>
-          <span className="rounded-full bg-[#c14b3d] px-3 py-1.5 font-semibold text-white">My Content</span>
+          <span className="rounded-full px-3 py-1.5 font-semibold text-white" style={{ backgroundColor: "var(--accent-solid)" }}>My Track</span>
+          <ThemeToggle />
         </nav>
       </div>
     </header>
   );
 }
 
-function Stat({ label, value }: { label: string; value: string | number }) {
+function LessonCard({ l, entry, onOpen, hero, compact }: {
+  l: (typeof myContentLessons)[number]; entry?: ProgressEntry; onOpen: () => void; hero?: boolean; compact?: boolean;
+}) {
+  const acc: Accent = accents[l.accent];
+  const done = !!entry?.completed;
+  const started = !!(entry?.listens || entry?.speakingDone);
   return (
-    <span className="rounded-full border px-4 py-1.5" style={{ borderColor: "var(--line)", backgroundColor: "var(--card)" }}>
-      <strong className="text-[var(--ink)]">{value}</strong> <span style={{ color: "var(--muted)" }}>{label}</span>
-    </span>
-  );
-}
-
-function LessonCard({ lesson, progress: p, onOpen, large, compact }: { lesson: McLesson; progress?: ProgressEntry; onOpen: () => void; large?: boolean; compact?: boolean }) {
-  const acc: Accent = accents[lesson.accent];
-  const done = !!p?.completed;
-  const started = !!(p?.listens || p?.speakingDone);
-  return (
-    <button onClick={onOpen} className={`group flex flex-col overflow-hidden rounded-3xl border text-left transition hover:-translate-y-0.5 ${large ? "sm:flex-row" : ""}`} style={{ borderColor: "var(--line)", backgroundColor: "var(--card)" }}>
-      <div className={`relative overflow-hidden ${large ? "sm:w-72 sm:shrink-0" : ""} ${compact ? "aspect-video" : "aspect-video sm:aspect-[16/10]"}`}>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={`https://i.ytimg.com/vi/${lesson.videoId}/hqdefault.jpg`} alt="" loading="lazy" className="h-full w-full object-cover opacity-85 transition group-hover:scale-[1.03]" />
-        <span className="absolute inset-0 bg-gradient-to-t from-black/85 to-transparent" />
-        <span className="absolute left-3 top-3 rounded-full px-2.5 py-1 text-[11px] font-bold text-white" style={{ backgroundColor: acc.solid }}>Day {lesson.day}</span>
-        {done && <span className="absolute right-3 top-3 grid h-7 w-7 place-items-center rounded-full text-[12px] font-bold text-white" style={{ backgroundColor: acc.solid }}>✓</span>}
-        <span className="absolute inset-0 grid place-items-center text-3xl text-white/90">▶</span>
+    <button onClick={onOpen} className={`group flex overflow-hidden rounded-xl border text-left transition hover:-translate-y-0.5 ${hero ? "flex-col sm:flex-row" : ""}`}
+      style={{ borderColor: done ? acc.line : "var(--line)", backgroundColor: done ? "var(--accent-soft)" : "var(--paper)" }}>
+      <div className={`relative shrink-0 overflow-hidden ${hero ? "sm:w-64" : "w-20"} ${compact ? "hidden sm:block sm:w-24" : ""}`}>
+        {hero ? (
+          <div className="aspect-video h-full w-full sm:aspect-auto">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={`https://i.ytimg.com/vi/${l.videoId}/hqdefault.jpg`} alt="" className="h-full w-full object-cover opacity-90" loading="lazy" />
+          </div>
+        ) : (
+          <div className="h-full min-h-[84px] w-full">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={`https://i.ytimg.com/vi/${l.videoId}/hqdefault.jpg`} alt="" className="h-full w-full object-cover opacity-80" loading="lazy" />
+          </div>
+        )}
       </div>
-      <div className="flex flex-1 flex-col p-5">
-        <p className="text-[11px] font-bold uppercase tracking-wide" style={{ color: acc.text }}>{lesson.tag}</p>
-        <h3 className={`mt-1 font-display font-semibold leading-snug ${large ? "text-2xl" : "text-lg"}`}>{lesson.title}</h3>
-        <p className="mt-2 text-[14px] leading-relaxed" style={{ color: "var(--muted)" }}>{lesson.benefit}</p>
-        <div className="mt-auto flex items-center justify-between pt-4 text-[12px]" style={{ color: "var(--muted)" }}>
-          <span>{done ? "Completed" : started ? "In progress" : "Short lesson"}</span>
+      <div className="min-w-0 flex-1 p-4">
+        <p className="text-[10px] font-bold uppercase tracking-[.16em]" style={{ color: acc.text }}>{l.tag}</p>
+        <h3 className={`mt-1 font-display font-semibold leading-snug ${hero ? "text-xl" : "text-[15px]"}`}>{l.title}</h3>
+        {hero && <p className="mt-1.5 text-[13px] leading-relaxed text-[var(--muted)]">{l.benefit}</p>}
+        <div className="mt-2 flex items-center justify-between text-[11px] text-[var(--muted)]">
+          <span className="inline-flex items-center gap-1">{done ? "✓ Completed" : started ? "In progress" : `Day ${l.day} · ${l.speaker}`}</span>
           <span className="font-bold" style={{ color: acc.text }}>Open →</span>
         </div>
       </div>
