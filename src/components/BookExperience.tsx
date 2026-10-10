@@ -125,7 +125,7 @@ export default function BookExperience({ items, level, nextCourse }: { items: Le
                   <h3 className="font-display text-lg font-semibold leading-snug">Real scene {item.number}</h3>
                   <p className="mt-1 text-[13px] leading-relaxed" style={{ color: "var(--muted)" }}>Watch the clip, steal {6 + (item.number % 4)} real phrases, shadow, think, speak, and write.</p>
                   <div className="mt-4 flex items-center justify-between border-t pt-3 text-[12px]" style={{ borderColor: "var(--line)", color: "var(--muted)" }}>
-                    <span>{done ? "Completed" : entry.listens ? "Started" : "Not started"}</span>
+                    <span>{done ? "Completed" : (entry.inProgress || entry.listens || entry.speakingDone) ? "In progress" : "Not started"}</span>
                     <span className="font-bold" style={{ color: acc.text }}>Open →</span>
                   </div>
                 </div>

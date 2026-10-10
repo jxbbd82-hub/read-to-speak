@@ -23,4 +23,6 @@ export type ProgressEntry = {
   wordMarks: Record<string, number>;
   speakingDone: boolean;
   completed: boolean;
+  /** Set automatically the first time the lesson is opened. */
+  inProgress?: boolean;
 };

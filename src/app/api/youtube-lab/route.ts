@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { fetchYouTubeCaptions } from "@/lib/youtubeCaptions";
-import { buildFromTranscript, buildMyContentLesson, splitSentences, type Cue, type SegmentLesson } from "@/lib/lessonBuilder";
+import { buildFromTranscript, buildMyContentLesson, cuesToTimedSentences, splitSentences, type Cue, type SegmentLesson } from "@/lib/lessonBuilder";
 import { extractYouTubeId, voiceForLevel } from "@/lib/youtubeLab";
 
 export const runtime = "nodejs";
@@ -34,14 +34,15 @@ export async function POST(req: NextRequest) {
 
     let transcript = (body.transcript ?? "").trim();
     let source: "captions" | "manual" | "none" = "none";
+    let realCues: Cue[] = [];
 
     if (transcript.length >= 40) source = "manual";
     else {
-      // Fast single-client attempt so the button gives a real answer quickly;
-      // the fetcher itself retries the timedtext URL on a transient 429.
+      // Real captions are the single source of truth for text AND timing.
       const caps = await fetchYouTubeCaptions(videoId, { fast: true }).catch(() => null);
       if (caps && caps.transcript.length > 60) {
         transcript = caps.transcript.slice(0, 6000);
+        realCues = caps.cues ?? [];
         source = "captions";
         if (caps.title) meta.title = caps.title;
         if (caps.author) meta.author = caps.author;
@@ -75,14 +76,27 @@ export async function POST(req: NextRequest) {
       if (words >= cap) break;
     }
     const workLevel = /C1|C2|B2/.test(level) ? "Work" : "Everyday";
+    // Only real YouTube captions carry accurate timings. Manual pasted
+    // transcripts can't be aligned to the video, so they get NO synced
+    // timestamps (the UI speaks those lines via TTS rather than mis-seeking).
+    const isReal = source === "captions" && realCues.length >= 4;
+    const cuesForBuild = isReal
+      ? (() => {
+          // keep the input scene short using real cues
+          let acc = 0; const out: Cue[] = [];
+          const capW = { A1: 200, A2: 260, B1: 340, B2: 400, C1: 460, C2: 520 }[level] ?? 340;
+          for (const c of realCues) { out.push(c); acc += c.text.split(/\s+/).length; if (acc >= capW) break; }
+          return out.length >= 3 ? out : realCues;
+        })()
+      : (shortCues.length >= 3 ? shortCues : allCues);
     const robust = buildMyContentLesson(
-      shortCues.length >= 3 ? shortCues : allCues,
+      cuesForBuild,
       level,
       { title: meta.title, author: meta.author },
       { focus: "", category: workLevel },
-      0,
-      0,
+      0, 0, isReal,
     );
+    if (isReal) robust.timedSentences = cuesToTimedSentences(cuesForBuild);
     const leveled: SegmentLesson = buildFromTranscript(transcript, level, { title: meta.title, author: meta.author });
 
     const finalLesson: SegmentLesson = {
@@ -106,6 +120,8 @@ export async function POST(req: NextRequest) {
       writingPrompt: finalLesson.writingPrompt,
       thinkPrompts: finalLesson.thinkPrompts,
       transcript: finalLesson.passage,
+      timedSentences: isReal ? (finalLesson.timedSentences ?? []) : [],
+      synced: isReal,
     });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "We couldn't open this video." }, { status: 500 });

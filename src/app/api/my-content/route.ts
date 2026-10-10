@@ -1,31 +1,20 @@
 import { NextRequest } from "next/server";
-import { fetchYouTubeCaptions } from "@/lib/youtubeCaptions";
-import { buildMyContentLesson, type Cue } from "@/lib/lessonBuilder";
+import {
+  buildMyContentLesson,
+  cuesToTimedSentences,
+  type Cue,
+  type SegmentLesson,
+} from "@/lib/lessonBuilder";
 import { myContentLessons } from "@/data/myContent";
-import baked from "@/data/my-content-transcripts.json";
+// Genuine, timestamped captions bundled per lesson (real source of truth).
+import realScenes from "@/data/my-content-real.json";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-const cache = new Map<string, ReturnType<typeof buildMyContentLesson>>();
-// Keyed by lesson key (mc-01, mc-02…) — each entry is a SHORT scene.
-const bakedMap = baked as Record<string, { title: string; author: string; cues?: Cue[]; transcript?: string }>;
-
-function cuesFromText(transcript: string): Cue[] {
-  let t = 0;
-  return (
-    transcript
-      .replace(/\s+/g, " ")
-      .match(/[^.!?]+[.!?]+|[^.!?]+$/g)
-      ?.map((s) => {
-        const text = s.trim();
-        const cue: Cue = { t, d: text.split(/\s+/).length * 420, text };
-        t += cue.d;
-        return cue;
-      }) ?? []
-  );
-}
+const cache = new Map<string, SegmentLesson>();
+const scenes = realScenes as Record<string, { title: string; author: string; cues?: Cue[]; transcript?: string }>;
 
 export async function GET(req: NextRequest) {
   const id = req.nextUrl.searchParams.get("id") ?? "";
@@ -33,49 +22,34 @@ export async function GET(req: NextRequest) {
   if (!lesson) return Response.json({ error: "unknown lesson" }, { status: 404 });
   if (cache.has(lesson.key)) return Response.json(cache.get(lesson.key));
 
-  const category = lesson.category === "design" ? "Design" :
-    lesson.category === "client" || lesson.category === "work" || lesson.category === "meeting" || lesson.category === "feedback" || lesson.category === "present" ? "Work" : "Everyday";
+  const category = ["client", "work", "meeting", "feedback", "present", "design"].includes(lesson.category)
+    ? "Work"
+    : "Everyday";
 
-  let result: ReturnType<typeof buildMyContentLesson> | null = null;
+  const scene = scenes[lesson.key];
+  if (!scene || !scene.cues?.length) {
+    return Response.json({ needsTranscript: true, videoId: lesson.videoId, title: lesson.title }, { status: 200 });
+  }
+
+  // Filter genuine cues to this scene's absolute time window.
   const startSec = lesson.start ?? 0;
   const endSec = lesson.end ?? 0;
+  let cues = scene.cues;
+  if (startSec) cues = cues.filter((c) => c.t >= startSec * 1000 - 200);
+  if (endSec) cues = cues.filter((c) => c.t <= endSec * 1000 + 500);
 
-  // 1) Fresh real captions, trimmed to the short scene window.
-  const caps = await fetchYouTubeCaptions(lesson.videoId, { fast: true }).catch(() => null);
-  if (caps && caps.cues.length >= 8) {
-    let cues = caps.cues;
-    if (startSec) cues = cues.filter((c) => c.t >= startSec * 1000);
-    if (endSec) cues = cues.filter((c) => c.t <= endSec * 1000);
-    if (cues.length >= 6) {
-      result = buildMyContentLesson(
-        cues, "B1",
-        { title: caps.title || lesson.title, author: caps.author || lesson.speaker },
-        { focus: lesson.focus, category }, startSec, 0,
-      );
-    }
-  }
-
-  // 2) Bundled scene transcript (accurate, short, keyed per lesson).
-  if (!result) {
-    const b = bakedMap[lesson.key] ?? bakedMap[lesson.videoId];
-    if (b) {
-      const cues: Cue[] = b.cues?.length ? b.cues : cuesFromText(b.transcript ?? "");
-      if (cues.length) {
-        result = buildMyContentLesson(
-          cues, "B1",
-          { title: b.title || lesson.title, author: b.author || lesson.speaker },
-          { focus: lesson.focus, category }, startSec, 0,
-        );
-        result.start = startSec;
-      }
-    }
-  }
-
-  if (!result) {
-    return Response.json({ needsTranscript: true, videoId: lesson.videoId, title: lesson.title, focus: lesson.focus, category }, { status: 200 });
-  }
-
+  const result = buildMyContentLesson(
+    cues, "B1",
+    { title: scene.title || lesson.title, author: scene.author || lesson.speaker },
+    { focus: lesson.focus, category },
+    startSec, 0, true, // realTimings = true
+  );
+  // Sentence timestamps come straight from genuine captions.
+  result.timedSentences = cuesToTimedSentences(cues);
+  result.start = Math.round(cues[0]?.t ? cues[0].t / 1000 : startSec);
   result.challenge = lesson.focus;
+  (result as SegmentLesson & { synced?: boolean }).synced = true;
+
   cache.set(lesson.key, result);
   return Response.json(result);
 }

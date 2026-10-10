@@ -42,14 +42,16 @@ function labToEngine(l: LabLesson): { item: LearningItem; segment: NonNullable<P
     start: 0,
     passage: l.transcript,
     chunks: l.chunks.map((c: LabChunk) => ({ word: c.phrase, part_of_speech: "spoken chunk", meaning: c.meaning, example: c.context })),
-    shadows: l.shadowLines,
-    questions: l.questions,
-    frames: l.answerFrames,
+    shadows: l.shadowLines ?? [],
+    questions: l.questions ?? [],
+    frames: l.answerFrames ?? [],
     writingPrompt: l.writingPrompt ?? "Write 5–6 sentences retelling the clip and your reaction.",
     thinkPrompts: l.thinkPrompts ?? ["Finish: The speaker is talking about…", "Change one detail: If this happened to me…", "Personalize: In my life, I…"],
     wordCount: l.transcript.split(/\s+/).length,
     challenge: "Imagine a friend hasn't seen the clip. Summarize it, share your opinion, and give one example — in 60 seconds.",
-  };
+    timedSentences: (l as LabLesson & { timedSentences?: { text: string; start: number; end: number }[] }).timedSentences ?? [],
+    synced: Boolean((l as LabLesson & { synced?: boolean }).synced) && ((l as LabLesson & { timedSentences?: unknown[] }).timedSentences?.length ?? 0) > 0,
+  } as NonNullable<Parameters<typeof UnitDetail>[0]["inlineLesson"]>;
   const entry: ProgressEntry = { listens: 1, readingUnlocked: true, wordMarks: {}, speakingDone: false, completed: false };
   return { item, segment, entry };
 }

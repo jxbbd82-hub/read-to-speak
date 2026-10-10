@@ -1,3 +1,5 @@
+import { realLessons } from "./curriculum-real";
+import type { RealLesson } from "./curriculum-real";
 // MY 3-MONTH SPEAKING TRACK
 // ---------------------------------------------------------------------------
 // A progressive speaking curriculum built from REAL, clean, short YouTube
@@ -309,7 +311,37 @@ function flat(): CurriculumLesson[] {
   return out;
 }
 
-export const curriculumLessons = flat();
-export const curriculumWeeks = weeks;
-export const TOTAL_DAYS = curriculumLessons.length;
+const curriculumLessonsLegacy = flat();
+const curriculumWeeksLegacy = weeks;
+export const TOTAL_DAYS = realLessons.length;
 export { V as curriculumVideos };
+
+
+
+export type CurriculumReal = RealLesson;
+export const realCurriculumLessons = realLessons.map((l) => ({
+  ...l,
+  id: l.key,
+  number: l.day,
+  level: "B1" as const,
+  source: "video" as const,
+  grammar: l.benefit,
+  grammarNote: "",
+  duration: null,
+  passage: [],
+  vocabulary: [],
+  speakingPrompts: [],
+  answerFrames: [],
+  shadowLines: [],
+  summary: l.focus,
+  voice: "andrew" as const,
+  seg: 0,
+}));
+// Public exports consumed by the app:
+//   curriculumLessons  -> 60 real-caption lessons
+//   curriculumWeeks    -> 12 progressive stage labels
+export { realCurriculumLessons as curriculumLessons };
+export const curriculumWeeks = Array.from({ length: 12 }, (_, i) => ({
+  stage: realLessons.find((l) => l.week === i + 1)?.stage ?? `Week ${i + 1}`,
+}));
+export const REAL_LESSONS = realLessons;

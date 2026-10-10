@@ -6,10 +6,12 @@ import { accents, type Accent, type ProgressEntry } from "@/lib/accents";
 import { playNeural, stopNeural } from "@/lib/neuralAudio";
 import { PlayButton, toSentences, LEVEL_VOICE } from "./Sentence";
 import InteractiveTranscript from "./InteractiveTranscript";
+import YouTubePlayer, { type YouTubePlayerHandle } from "./YouTubePlayer";
 import ShadowDrill from "./ShadowDrill";
 import PhrasePractice from "./PhrasePractice";
 import BuildAnswer from "./BuildAnswer";
 import SpeakingLadder from "./SpeakingLadder";
+import SpeakingCoach from "./SpeakingCoach";
 import SpeakingChallenge from "./SpeakingChallenge";
 import SimpleRecorder from "./SimpleRecorder";
 import { buildLadder, buildStems, thinkTasks, challengePrep, isClientContext } from "@/lib/speaking";
@@ -21,6 +23,9 @@ type Segment = {
   chunks: VocabItem[]; shadows: string[]; questions: string[];
   frames: string[]; writingPrompt: string; thinkPrompts: string[]; wordCount: number;
   challenge?: string;
+  timedSentences?: { text: string; start: number; end: number }[];
+  /** True only when timedSentences come from real caption timing. */
+  synced?: boolean;
 };
 
 export type LessonSource = {
@@ -128,6 +133,8 @@ export default function UnitDetail({ item, entry, onChange, onClose, source, cha
   const [shadowDone, setShadowDone] = useState(0);
   const [ladderDone, setLadderDone] = useState(false);
   const [challengeDone, setChallengeDone] = useState(false);
+  const playerRef = useRef<YouTubePlayerHandle | null>(null);
+  const [videoTime, setVideoTime] = useState(0);
   const cacheKey = source?.cacheKey ?? `rts-seg-${item.level}-${item.videoId}-${item.seg}`;
 
   const applySegment = useCallback((s: Segment) => { setSeg(s); setLoading(false); setNeedsText(false); try { localStorage.setItem(cacheKey, JSON.stringify(s)); } catch {} }, [cacheKey]);
@@ -159,6 +166,14 @@ export default function UnitDetail({ item, entry, onChange, onClose, source, cha
       .catch(() => alive && (setLoading(false), setNeedsText(true)));
     return () => { alive = false; };
   }, [item, cacheKey, applySegment, source, challenge, inlineLesson]);
+
+  // Automatic visit tracking: mark "In Progress" as soon as a lesson opens,
+  // without ever flipping a completed lesson back to in-progress.
+  useEffect(() => {
+    if (entry.completed || entry.inProgress) return;
+    onChange({ inProgress: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cacheKey]);
 
   const playAll = () => {
     if (!seg) return;
@@ -202,7 +217,7 @@ export default function UnitDetail({ item, entry, onChange, onClose, source, cha
 
       {needsText && (
         <div className="mt-6 rounded-3xl border p-6" style={{ borderColor: "var(--line)", backgroundColor: "var(--card)" }}>
-          <SceneEmbed videoId={item.videoId} start={source?.videoStart ?? 0} title="Lesson" />
+          <YouTubePlayer ref={playerRef} videoId={item.videoId} start={source?.videoStart ?? 0} onTime={setVideoTime} />
           <p className="mt-4 text-sm" style={{ color: "var(--muted)" }}>The video is ready. On YouTube tap <b>⋯ → Show transcript</b>, copy 30–90 seconds, and paste below.</p>
           <textarea value={paste} onChange={(e) => setPaste(e.target.value)} rows={7} placeholder="Paste the English transcript…" className="mt-3 w-full rounded-2xl border p-3 text-sm outline-none" style={{ borderColor: "var(--line)", backgroundColor: "var(--paper)", color: "var(--ink)" }} />
           <button onClick={loadFromTranscript} disabled={busy || paste.trim().split(/\s+/).length < 15} className="mt-3 rounded-full px-5 py-2.5 text-sm font-bold text-white disabled:opacity-40" style={{ backgroundColor: acc.solid }}>{busy ? "Building…" : "Build lesson"}</button>
@@ -214,7 +229,7 @@ export default function UnitDetail({ item, entry, onChange, onClose, source, cha
           {/* 1 watch */}
           <section>
             <SectionHead n={1} title="Watch" done={steps.listen} />
-            <div className="mt-2"><SceneEmbed videoId={item.videoId} start={source?.videoStart ?? seg.start} title={seg.title} /></div>
+            <div className="mt-2"><YouTubePlayer ref={playerRef} videoId={item.videoId} start={source?.videoStart ?? seg.start} onTime={setVideoTime} /></div>
           </section>
 
           {/* 2 listen + interactive transcript */}
@@ -230,7 +245,17 @@ export default function UnitDetail({ item, entry, onChange, onClose, source, cha
                 </select>
               </label>
             </div>
-            <div className="mt-3"><InteractiveTranscript passage={seg.passage} level={item.level} compact /></div>
+            <div className="mt-3">
+              <InteractiveTranscript
+                passage={seg.passage}
+                level={item.level}
+                compact
+                timed={seg.timedSentences}
+                playerRef={playerRef}
+                currentTime={videoTime}
+                synced={seg.synced ?? false}
+              />
+            </div>
           </section>
 
           {/* 3 shadow */}
@@ -272,6 +297,21 @@ export default function UnitDetail({ item, entry, onChange, onClose, source, cha
             <div className="mt-2"><SpeakingLadder level={item.level} rungs={ladder} storageKey={`${cacheKey}-ladder`} onComplete={() => { setLadderDone(true); onChange({ speakingDone: true }); }} /></div>
           </section>
 
+          {/* 7b progressive 5-stage speaking coach */}
+          <section>
+            <SectionHead n={7} title="Speaking coach · 5 stages" done={ladderDone} />
+            <div className="mt-2">
+              <SpeakingCoach
+                level={item.level}
+                passage={seg.passage}
+                shadows={seg.shadows}
+                chunks={seg.chunks}
+                questions={seg.questions}
+                frames={seg.frames}
+              />
+            </div>
+          </section>
+
           {/* 8 challenge */}
           <section>
             <SectionHead n={8} title="Speaking challenge" done={steps.challenge} />
@@ -299,7 +339,7 @@ export default function UnitDetail({ item, entry, onChange, onClose, source, cha
               </>
             ) : (
               <>
-                <p className="text-sm font-semibold" style={{ color: "var(--ink)" }}>{canComplete ? "Ready" : "Complete the speaking steps:"}</p>
+                <p className="text-sm font-semibold" style={{ color: "var(--ink)" }}>{canComplete ? "All speaking steps done" : "Optional steps remaining:"}</p>
                 {!canComplete && (
                   <ul className="mx-auto mt-2 max-w-xs space-y-1 text-left text-[13px]" style={{ color: "var(--muted)" }}>
                     {!steps.listen && <li>• Listen once</li>}
@@ -309,9 +349,11 @@ export default function UnitDetail({ item, entry, onChange, onClose, source, cha
                     {!steps.challenge && <li>• Do the speaking challenge</li>}
                   </ul>
                 )}
-                <button disabled={!canComplete} onClick={() => onChange({ completed: true, readingUnlocked: true })}
-                  className="mt-4 w-full rounded-2xl px-6 py-3.5 font-bold text-white transition disabled:opacity-40" style={{ backgroundColor: acc.solid }}>
-                  Finish lesson
+                {/* Always clickable: learners may mark a lesson complete even if
+                    they skipped individual activities. Saves immediately. */}
+                <button onClick={() => onChange({ completed: true, readingUnlocked: true, inProgress: true })}
+                  className="mt-4 w-full rounded-2xl px-6 py-3.5 font-bold text-white transition hover:opacity-90" style={{ backgroundColor: acc.solid }}>
+                  Mark as complete
                 </button>
               </>
             )}

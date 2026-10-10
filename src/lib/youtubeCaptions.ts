@@ -200,3 +200,18 @@ export async function fetchYouTubeCaptions(videoId: string, opts?: { fast?: bool
   }
   return null;
 }
+
+/**
+ * Returns ONLY real, caption-derived timed cues for the given time window.
+ * Never estimates or fabricates timing. Returns [] when no real captions are
+ * available — callers must treat that as "no synced transcript".
+ */
+export async function fetchRealCues(videoId: string, startSec = 0, endSec = 0): Promise<TimedCue[]> {
+  const caps = await fetchYouTubeCaptions(videoId).catch(() => null);
+  if (!caps || !caps.cues.length) return [];
+  return caps.cues.filter((c) => {
+    if (startSec && c.t < startSec * 1000 - 100) return false;
+    if (endSec && c.t > endSec * 1000 + 100) return false;
+    return true;
+  });
+}

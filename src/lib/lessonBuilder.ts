@@ -2,6 +2,9 @@ import type { VocabItem } from "@/data/courses";
 
 export type Cue = { t: number; d: number; text: string };
 
+/** One sentence with reliable, video-relative timestamps (seconds). */
+export type TimedSentence = { text: string; start: number; end: number };
+
 export type SegmentLesson = {
   title: string;
   author: string;
@@ -15,6 +18,8 @@ export type SegmentLesson = {
   thinkPrompts: string[];
   wordCount: number;
   challenge?: string;
+  /** Complete, ordered, timestamped transcript of the scene (when known). */
+  timedSentences?: TimedSentence[];
 };
 
 const CHUNKS: Array<[string, string]> = [
@@ -79,6 +84,44 @@ const THINK: Record<string, string[]> = {
 
 export const splitSentences = (text: string) =>
   text.match(/[^.!?]+[.!?]+|[^.!?]+$/g)?.map((s) => s.trim()).filter((s) => s.split(/\s+/).length >= 2) ?? [];
+
+// Average spoken pace (words per second) used only to estimate timestamps
+// when a bundled transcript has no cue durations. ~2.7 w/s is natural and
+// slightly slow enough for B1 learners.
+const WORDS_PER_SECOND = 2.7;
+
+/** Convert timed cues (milliseconds) into ordered sentences with start/end. */
+export function cuesToTimedSentences(cues: Cue[]): TimedSentence[] {
+  const out: TimedSentence[] = [];
+  for (const c of cues) {
+    const sentences = splitSentences(c.text);
+    if (!sentences.length) continue;
+    const start = c.t / 1000;
+    const dur = (c.d || c.text.split(/\s+/).length / WORDS_PER_SECOND * 1000) / 1000;
+    // Split a cue's duration across its sentences proportionally by words.
+    const wordCounts = sentences.map((s) => Math.max(1, s.split(/\s+/).length));
+    const totalWords = wordCounts.reduce((a, b) => a + b, 0);
+    let cursor = start;
+    sentences.forEach((s, i) => {
+      const sec = Math.max(0.8, (wordCounts[i] / totalWords) * dur);
+      out.push({ text: s, start: +cursor.toFixed(2), end: +(cursor + sec).toFixed(2) });
+      cursor += sec;
+    });
+  }
+  return out;
+}
+
+/** Estimate sentence timestamps for plain bundled text (real dialogue kept). */
+export function textToTimedSentences(text: string, offsetSec = 0): TimedSentence[] {
+  const out: TimedSentence[] = [];
+  let cursor = offsetSec;
+  for (const s of splitSentences(text)) {
+    const sec = Math.max(0.9, s.split(/\s+/).length / WORDS_PER_SECOND);
+    out.push({ text: s, start: +cursor.toFixed(2), end: +(cursor + sec).toFixed(2) });
+    cursor += sec + 0.12;
+  }
+  return out;
+}
 
 // Give each fall-back starter a meaning that reflects what it actually does,
 // so meanings never repeat across the chunks of one lesson.
@@ -231,6 +274,7 @@ export function buildSegment(cues: Cue[], level: string, segIndex: number, meta:
     writingPrompt: WRITE[level] ?? WRITE.B1,
     thinkPrompts: THINK[level] ?? THINK.B1,
     wordCount: text.split(/\s+/).length,
+    timedSentences: cuesToTimedSentences(seg.cues),
   };
 }
 
@@ -298,6 +342,7 @@ export function buildMyContentLesson(
   spec: MyContentSpec,
   start = 0,
   occurrence = 0,
+  realTimings = false,
 ): SegmentLesson {
   const base = "B1";
   const windowed = sliceCuesByOccurrence(cues, occurrence);
@@ -430,6 +475,8 @@ export function buildMyContentLesson(
     thinkPrompts: think,
     wordCount: text.split(/\s+/).length,
     challenge: spec.focus,
+    // Only attach synced timestamps when cues come from real captions.
+    timedSentences: realTimings ? cuesToTimedSentences(windowed) : [],
   };
 }
 

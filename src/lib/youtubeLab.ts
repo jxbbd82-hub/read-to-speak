@@ -18,6 +18,7 @@ export type LabLesson = {
   source?: string;
   needsTranscript?: boolean;
   translated?: boolean;
+  timedSentences?: { text: string; start: number; end: number }[];
   language?: string;
   notice?: string;
 };

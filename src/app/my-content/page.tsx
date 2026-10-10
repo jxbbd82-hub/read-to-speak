@@ -176,7 +176,7 @@ function LessonCard({ l, entry, onOpen, hero, compact }: {
 }) {
   const acc: Accent = accents[l.accent];
   const done = !!entry?.completed;
-  const started = !!(entry?.listens || entry?.speakingDone);
+  const started = !!(entry?.inProgress || entry?.listens || entry?.speakingDone);
   return (
     <button onClick={onOpen} className={`group flex overflow-hidden rounded-xl border text-left transition hover:-translate-y-0.5 ${hero ? "flex-col sm:flex-row" : ""}`}
       style={{ borderColor: done ? acc.line : "var(--line)", backgroundColor: done ? "var(--accent-soft)" : "var(--paper)" }}>
